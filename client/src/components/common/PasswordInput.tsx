@@ -1,5 +1,6 @@
 import { Eye, EyeOff } from 'lucide-react';
 import { useState, type ComponentProps } from 'react';
+import { PASSWORD_MIN_LENGTH } from '@arihant/shared';
 import { Input } from '@/components/ui/input';
 
 export function PasswordInput(props: Omit<ComponentProps<typeof Input>, 'type'>) {
@@ -23,7 +24,10 @@ export function PasswordInput(props: Omit<ComponentProps<typeof Input>, 'type'>)
 /** Live checklist mirroring the server password policy. */
 export function PasswordRequirements({ value }: { value: string }) {
   const rules = [
-    { ok: value.length >= 10, label: 'At least 10 characters' },
+    {
+      ok: value.length >= PASSWORD_MIN_LENGTH,
+      label: `At least ${PASSWORD_MIN_LENGTH} characters`,
+    },
     { ok: /[A-Za-z]/.test(value), label: 'A letter' },
     { ok: /\d/.test(value), label: 'A number' },
   ];

@@ -4,7 +4,7 @@
 
 ## 18. Security architecture
 
-- **Passwords:** argon2id; password policy (≥10 characters, breached-list check optional); account lockout after 5 failures for 15 min.
+- **Passwords:** argon2id; password policy (≥8 characters, breached-list check optional); account lockout after 5 failures for 15 min.
 - **Tokens:** access JWT (15 min) sent as a bearer header and held in memory on the client. The refresh token (7 days) is opaque, stored hashed, and lives in an **HttpOnly, Secure, SameSite=Strict cookie** scoped to `/api/v1/auth`. Rotation runs on every refresh; **reuse detection revokes the whole token family**. A `tokenVersion` on the user allows global logout.
 - **Authorisation:** backend `authorize()` plus `scopeFilter()` on every query; object-level checks on `:id` routes; tests cover each role.
 - **Input:** Zod strict schemas (unknown keys rejected); `express-mongo-sanitize`-style stripping of `$` and `.`; Mongoose `strictQuery`.
