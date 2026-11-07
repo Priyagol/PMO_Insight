@@ -1,0 +1,72 @@
+# Development infrastructure only. API, worker and client run on the host (npm run dev).
+name: arihant-workspace
+
+services:
+  mongo:
+    image: mongo:7
+    command: ['--replSet', 'rs0', '--bind_ip_all']
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      # Initiates the single-node replica set on first boot, then reports health.
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] }).ok }"
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '6380:6379' # 6380 on the host avoids clashing with other local Redis instances
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # S3-compatible object storage (SeaweedFS, Apache-2.0). The API talks plain S3, so any
+  # S3-compatible store can replace it in production. The bucket is created by the API
+  # on first start in non-production environments.
+  s3:
+    image: chrislusf/seaweedfs:4.50
+    command:
+      - server
+      - -dir=/data
+      - -s3
+      - -s3.port=8333
+      - -s3.config=/etc/seaweedfs/s3.json
+      - -master.volumeSizeLimitMB=1024
+      - -volume.max=0
+    ports:
+      - '8333:8333'
+    volumes:
+      - s3-data:/data
+      - ./docker/seaweedfs/s3.dev.json:/etc/seaweedfs/s3.json:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:8333/healthz || exit 1']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - '1025:1025'
+      - '8025:8025'
+
+volumes:
+  mongo-data:
+  redis-data:
+  s3-data:

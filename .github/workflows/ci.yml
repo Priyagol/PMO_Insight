@@ -1,0 +1,93 @@
+# Continuous integration: every pull request and every push to main.
+# Checks run without any company data: unit/integration tests use an in-memory MongoDB, and the
+# end-to-end job seeds synthetic DEV data into throwaway Docker services.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  # Reused by deploy.yml so production deploys run the same checks first.
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  checks:
+    name: Lint, typecheck, unit and integration tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Cache MongoDB test binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - name: Shared tests
+        run: npm test -w packages/shared
+      - name: Server tests (in-memory MongoDB)
+        run: npm test -w server
+      - name: Client tests
+        run: npm test -w client
+      - run: npm run build
+      - name: Dependency audit (production dependencies, high and above)
+        run: npm audit --omit=dev --audit-level=high
+
+  e2e:
+    name: End-to-end (Playwright)
+    needs: checks
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Start MongoDB, Redis, object storage and mail catcher
+        run: docker compose up -d --wait
+      - name: Write a throwaway server environment
+        run: |
+          cp .env.example server/.env
+          # Fresh random secret for this run only; E2E signs in many times from one IP.
+          sed -i "s|^JWT_ACCESS_SECRET=.*|JWT_ACCESS_SECRET=$(openssl rand -hex 32)|" server/.env
+          sed -i "s|^AUTH_RATE_LIMIT_MAX=.*|AUTH_RATE_LIMIT_MAX=500|" server/.env
+      - name: Seed synthetic DEV data
+        run: npm run seed:dev -w server
+      - name: Start the app
+        run: |
+          npm run dev > dev.log 2>&1 &
+          for i in $(seq 1 60); do curl -fsS http://localhost:5173/api/v1/health > /dev/null && exit 0; sleep 2; done
+          echo "::error::App did not start"; tail -50 dev.log; exit 1
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Upload Playwright report and app log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+            dev.log
+          retention-days: 7

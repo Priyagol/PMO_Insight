@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "arihant-dev",
+      "credentials": [{ "accessKey": "arihant", "secretKey": "arihant-dev-secret" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

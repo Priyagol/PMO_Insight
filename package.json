@@ -1,0 +1,43 @@
+{
+  "name": "arihant-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Arihant Workspace - enterprise project, work and business intelligence platform for Arihant Capitals",
+  "workspaces": [
+    "packages/shared",
+    "server",
+    "client"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -n server,worker,client -c blue,magenta,green \"npm:dev -w server\" \"npm:dev:worker -w server\" \"npm:dev -w client\"",
+    "dev:infra": "docker compose up -d",
+    "build": "npm run build -w server && npm run build -w client",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p e2e/tsconfig.json",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "npm run test --workspaces --if-present",
+    "vercel:api-host": "node scripts/set-vercel-api-host.mjs",
+    "test:e2e": "playwright test -c e2e/playwright.config.ts",
+    "backup": "node --env-file-if-exists=server/.env scripts/backup/backup.mjs",
+    "restore": "node --env-file-if-exists=server/.env scripts/backup/restore.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.65.0",
+    "@types/node": "^26.6.6",
+    "concurrently": "^10.0.6",
+    "eslint": "^10.14.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.7",
+    "globals": "^17.14.0",
+    "prettier": "^3.9.10",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.1.0"
+  },
+  "type": "module"
+}

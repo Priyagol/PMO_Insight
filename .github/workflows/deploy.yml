@@ -1,0 +1,53 @@
+# Production deployment, started by hand and gated by the "production" GitHub environment
+# (configure required reviewers there). Hosting is still to be confirmed; this workflow targets the
+# current plan in docs/deployment.md: API and worker on Render (deploy hooks), web on Vercel.
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type "deploy" to deploy the selected commit to production
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    if: inputs.confirm == 'deploy'
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: checks
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    steps:
+      - name: Check deployment secrets are configured
+        env:
+          RENDER_API_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_API }}
+          RENDER_WORKER_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_WORKER }}
+          VERCEL_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+          API_URL: ${{ vars.PRODUCTION_API_URL }}
+        run: |
+          for v in RENDER_API_HOOK RENDER_WORKER_HOOK VERCEL_HOOK API_URL; do
+            if [ -z "${!v}" ]; then echo "::error::$v is not configured"; exit 1; fi
+          done
+      # Render deploys the latest commit of the branch the services track (main).
+      - name: Deploy API and worker (Render)
+        run: |
+          curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK_API }}" > /dev/null
+          curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK_WORKER }}" > /dev/null
+      # Render keeps the old instance serving until the new one passes its health check, so this only
+      # confirms the service is healthy afterwards; check the Render dashboard for the deployed commit.
+      - name: Wait for the API to report ready
+        run: |
+          sleep 60
+          for i in $(seq 1 60); do
+            if curl -fsS "${{ vars.PRODUCTION_API_URL }}/api/v1/ready" > /dev/null; then echo "API ready"; exit 0; fi
+            sleep 10
+          done
+          echo "::error::API did not become ready in 10 minutes"; exit 1
+      - name: Deploy web app (Vercel)
+        run: curl -fsS -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}" > /dev/null

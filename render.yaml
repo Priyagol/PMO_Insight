@@ -1,0 +1,109 @@
+# Render Blueprint: API + background worker + managed Redis (Key Value).
+# Create with: Render dashboard > New > Blueprint > select this repository.
+# MongoDB (Atlas), object storage (S3/R2) and SMTP are external; their secrets are entered
+# in the dashboard (sync: false) and never committed.
+services:
+  - type: web
+    name: arihant-workspace-api
+    runtime: docker
+    dockerfilePath: ./server/Dockerfile
+    dockerContext: .
+    region: singapore # closest Render region to India
+    plan: starter
+    healthCheckPath: /api/v1/health
+    envVars:
+      - fromGroup: arihant-workspace-shared
+      - key: PORT
+        value: '4000'
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: arihant-workspace-redis
+          property: connectionString
+
+  - type: worker
+    name: arihant-workspace-worker
+    runtime: docker
+    dockerfilePath: ./server/Dockerfile
+    dockerContext: .
+    dockerCommand: node dist/worker.js
+    region: singapore
+    plan: starter
+    envVars:
+      - fromGroup: arihant-workspace-shared
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: arihant-workspace-redis
+          property: connectionString
+
+  - type: keyvalue
+    name: arihant-workspace-redis
+    region: singapore
+    plan: starter
+    # BullMQ requires that queued jobs are never evicted.
+    maxmemoryPolicy: noeviction
+    ipAllowList: [] # private network only
+
+envVarGroups:
+  - name: arihant-workspace-shared
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: ORG_TIMEZONE
+        value: Asia/Kolkata
+      # Vercel rewrite + Render proxy in front of the API.
+      - key: TRUST_PROXY_HOPS
+        value: '2'
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      # Secrets / per-deployment values, set in the dashboard:
+      - key: MONGO_URI
+        sync: false
+      # Same value as the webhook secret in GitHub (git integration); leave unset to keep it off.
+      - key: GITHUB_WEBHOOK_SECRET
+        sync: false
+      - key: GITLAB_WEBHOOK_SECRET
+        sync: false
+      - key: BITBUCKET_WEBHOOK_SECRET
+        sync: false
+      # 32 random bytes, base64: encrypts two-step verification secrets.
+      - key: DATA_ENCRYPTION_KEY
+        sync: false
+      # Single sign-on (OpenID Connect); leave unset to keep it off.
+      - key: OIDC_ISSUER
+        sync: false
+      - key: OIDC_CLIENT_ID
+        sync: false
+      - key: OIDC_CLIENT_SECRET
+        sync: false
+      - key: OIDC_PROVIDER_NAME
+        sync: false
+      - key: APP_ORIGIN # e.g. https://arihant-workspace.vercel.app
+        sync: false
+      - key: PUBLIC_APP_URL
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_REGION
+        sync: false
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ACCESS_KEY
+        sync: false
+      - key: S3_SECRET_KEY
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_SECURE
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: MAIL_FROM
+        sync: false
