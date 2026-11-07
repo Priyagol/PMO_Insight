@@ -180,6 +180,7 @@ export interface OverviewDto {
   };
   people: {
     total: number;
+    /** Average open load as a percentage of capacity (85.3 = 85.3%). */
     avgUtilization: number | null;
     overloaded: number;
     onLeave: number;
@@ -201,6 +202,7 @@ export interface OverviewDto {
     estimated: number;
     actual: number;
   }[];
+  /** `utilization` is a percentage of capacity (120 = 120%). */
   workload: { user: UserRef; utilization: number; loadHours: number; capacityHours: number }[];
   assignmentMethods: { method: string; count: number }[];
   upcoming: {

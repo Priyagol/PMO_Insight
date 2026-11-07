@@ -124,7 +124,7 @@ export function OverviewPage() {
               value={
                 d
                   ? d.people?.avgUtilization != null
-                    ? `${Math.round(d.people.avgUtilization * 100)}%`
+                    ? `${Math.round(d.people.avgUtilization)}%`
                     : '—'
                   : undefined
               }

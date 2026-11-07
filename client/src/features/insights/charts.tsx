@@ -216,7 +216,7 @@ export function WorkloadChart({
 }) {
   const rows = (data ?? []).map((d) => ({
     label: d.user.name,
-    utilization: Math.round(d.utilization * 100),
+    utilization: Math.round(d.utilization),
     load: d.loadHours,
     capacity: d.capacityHours,
   }));

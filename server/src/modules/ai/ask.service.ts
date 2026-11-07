@@ -317,7 +317,7 @@ async function execute(rc: RequestContext, auth: AuthContext, plan: AskPlan, vis
         columns: ['Person', 'Utilisation %', 'Open load (h)', 'Capacity (h)'],
         rows: o.workload.map((w) => [
           w.user.name,
-          Math.round(w.utilization * 100),
+          Math.round(w.utilization),
           w.loadHours,
           w.capacityHours,
         ]),

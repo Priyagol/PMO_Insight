@@ -64,7 +64,7 @@ const overview = (): OverviewDto => ({
   scope: 'organisation',
   projects: { total: 4, active: 3, completed: 1, delayed: 1, atRisk: 1, onHold: 0 },
   tasks: { total: 40, open: 27, overdue: 5, blocked: 2, completedInPeriod: 13, createdInPeriod: 9 },
-  people: { total: 6, avgUtilization: 0.62, overloaded: 1, onLeave: 0 },
+  people: { total: 6, avgUtilization: 62, overloaded: 1, onLeave: 0 },
   hours: { loggedInPeriod: 182.5, estimatedOpen: 240 },
   taskStatus: [
     { status: 'todo', count: 20 },
@@ -83,7 +83,7 @@ const overview = (): OverviewDto => ({
     },
   ],
   plannedVsActual: [{ project: proj, estimated: 120, actual: 80 }],
-  workload: [{ user, utilization: 1.2, loadHours: 96, capacityHours: 80 }],
+  workload: [{ user, utilization: 120, loadHours: 96, capacityHours: 80 }],
   assignmentMethods: [{ method: 'auto', count: 3 }],
   upcoming: { projects: [], tasks: [] },
   health: { healthy: 2, watch: 0, at_risk: 1 },

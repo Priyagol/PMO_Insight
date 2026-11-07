@@ -201,6 +201,15 @@ describe('analytics', () => {
       actual: 5,
     });
     expect(ov.body.data.people.total).toBe(3);
+    // Utilisation is a percentage (85.3 = 85.3%), not a ratio: the client shows it as is.
+    const workload = ov.body.data.workload as {
+      utilization: number;
+      loadHours: number;
+      capacityHours: number;
+    }[];
+    expect(workload.some((w) => w.loadHours > 0)).toBe(true);
+    for (const w of workload)
+      expect(w.utilization).toBeCloseTo((w.loadHours / w.capacityHours) * 100, 0);
 
     // Developers get a personal view: only their own tasks.
     const mine = await api().get('/api/v1/analytics/overview').set(dev.auth);
