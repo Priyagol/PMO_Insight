@@ -22,3 +22,6 @@ playwright-report/
 
 # Database and file backups (confidential, never commit)
 backups/
+
+.vercel
+.env*

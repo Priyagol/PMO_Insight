@@ -20,7 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useCan } from '@/hooks/use-permission';
 import * as org from '@/services/api/org';
 import { useAppSelector } from '@/store';
-import { EmploymentBadge, Pill } from '../components/Badges';
+import { EmploymentBadge, RolePill } from '../components/Badges';
 import { useOrgMutation, useUser } from '../hooks';
 import { PassportPanel } from '@/features/tracking/PassportPanel';
 import { EmployeeFormDialog } from './EmployeeFormDialog';
@@ -172,9 +172,7 @@ export function EmployeeDrawer({
                 </h3>
                 <div className="flex flex-wrap gap-1.5">
                   {user.roles.map((r) => (
-                    <Pill key={r.id} className="bg-accent text-accent-foreground">
-                      {r.name}
-                    </Pill>
+                    <RolePill key={r.id} role={r} />
                   ))}
                 </div>
               </section>

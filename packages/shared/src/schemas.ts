@@ -7,7 +7,7 @@ import { objectIdSchema, paginationQuerySchema } from './api';
  * Validation schemas shared by API (request validation) and client (forms).
  * ------------------------------------------------------------------------- */
 
-export const PASSWORD_MIN_LENGTH = 10;
+export const PASSWORD_MIN_LENGTH = 8;
 
 export const passwordSchema = z
   .string()

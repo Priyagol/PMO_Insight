@@ -97,7 +97,7 @@ describe('ResetPasswordPage', () => {
     await user.type(screen.getByLabelText('New password'), 'short');
     await user.type(screen.getByLabelText('Confirm password'), 'different');
     await user.click(screen.getByRole('button', { name: 'Activate account' }));
-    expect(await screen.findByText('Use at least 10 characters')).toBeInTheDocument();
+    expect(await screen.findByText('Use at least 8 characters')).toBeInTheDocument();
     expect(screen.getByText('Passwords do not match')).toBeInTheDocument();
     expect(authApi.resetPassword).not.toHaveBeenCalled();
   });
