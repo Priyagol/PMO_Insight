@@ -8,7 +8,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://REPLACE-WITH-API-HOST/api/:path*"
+      "destination": "https://arihant-workspace-api-nn3e.onrender.com/api/:path*"
     },
     {
       "source": "/((?!assets/).*)",
