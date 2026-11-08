@@ -28,6 +28,7 @@ export const NOTIFICATION_TYPES = [
   'action_item',
   'assignment_done',
   'automation',
+  'smart_commit',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -81,6 +82,11 @@ export const NOTIFICATION_CATALOGUE: Record<
     label: 'My assignment plan has been executed',
     group: 'Projects',
     email: false,
+  },
+  smart_commit: {
+    label: 'A command in my commit message could not be carried out',
+    group: 'Tasks',
+    email: true,
   },
 };
 

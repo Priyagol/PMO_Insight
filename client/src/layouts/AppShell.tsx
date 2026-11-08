@@ -39,8 +39,10 @@ export function AppShell() {
   );
   useModHotkey('k', togglePalette);
 
+  // relative: hidden screen-reader labels (position: absolute) stay inside the shell instead of
+  // stretching the page and adding a second set of scrollbars.
   return (
-    <div className="flex h-dvh overflow-hidden bg-background">
+    <div className="relative flex h-dvh overflow-hidden bg-background">
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-primary-foreground"

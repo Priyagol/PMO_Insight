@@ -5,6 +5,7 @@ import {
   STATUS_LABELS,
   gitSettingsSchema,
   parseGitReferences,
+  parseSmartCommits,
   rankBetween,
   type GitLinkDto,
   type GitSettingsDto,
@@ -26,6 +27,7 @@ import { Task, type ITask } from '../tasks/task.model';
 import { lastRankIn, loadTask } from '../tasks/task.service';
 import { GitDelivery, GitLink } from './git.models';
 import { recordTransition, workflowOf } from '../workflows/workflow.service';
+import { resolveCommitter, runSmartCommit } from './smart-commit.service';
 
 export const WEBHOOK_PATH = '/api/v1/integrations/github/webhook';
 export const GITLAB_WEBHOOK_PATH = '/api/v1/integrations/gitlab/webhook';
@@ -41,7 +43,12 @@ const providerScope = new AsyncLocalStorage<GitProvider>();
 const provider = (): GitProvider => providerScope.getStore() ?? 'github';
 const providerLabel = () => PROVIDER_LABELS[provider()];
 const SETTINGS_KEY = 'git';
-const DEFAULTS: GitSettingsInput = { enabled: false, repos: [], moveOnFix: true };
+const DEFAULTS: GitSettingsInput = {
+  enabled: false,
+  repos: [],
+  moveOnFix: true,
+  smartCommits: true,
+};
 
 async function settings(): Promise<GitSettingsInput> {
   const doc = await Setting.findOne({ key: SETTINGS_KEY }).lean();
@@ -107,6 +114,7 @@ export async function listTaskGitLinks(rc: RequestContext, taskId: string): Prom
     branch: l.branch ?? undefined,
     state: l.state ?? undefined,
     movedTask: l.movedTask,
+    actions: l.actions ?? [],
     at: l.occurredAt.toISOString(),
   }));
 }
@@ -132,7 +140,7 @@ interface PushPayload {
     message: string;
     url: string;
     timestamp?: string;
-    author?: { name?: string; username?: string };
+    author?: { name?: string; username?: string; email?: string };
   }[];
 }
 interface PullRequestPayload {
@@ -220,7 +228,7 @@ async function moveToReview(task: ITask, source: string, requestId?: string): Pr
     type: 'task_status',
     title: `${task.key} moved to In review by ${providerLabel()}`,
     body: source,
-    link: `/my-tasks?task=${task._id.toString()}`,
+    link: `/tasks/mine?task=${task._id.toString()}`,
   });
   eventBus.publish(
     'task.status_changed',
@@ -331,24 +339,26 @@ export async function handleGithubEvent(
 
   if (event === 'push') {
     const branch = body.ref?.startsWith('refs/heads/') ? body.ref.slice(11) : null;
+    const smart = { tasks: 0, unknownCommitter: 0 };
     for (const c of (body.commits ?? []).slice(0, 100)) {
       const refs = parseGitReferences(c.message);
       const tasks = await tasksByKey(refs.keys);
       const firstLine = c.message.split('\n')[0]!.slice(0, 300) || c.id.slice(0, 7);
+      const at = c.timestamp ? new Date(c.timestamp) : new Date();
+      const lines = cfg.smartCommits ? parseSmartCommits(c.message) : [];
+      let committer: Awaited<ReturnType<typeof resolveCommitter>> | undefined;
       for (const [key, task] of tasks) {
-        if (
-          await upsertLink(task, {
-            kind: 'commit',
-            repo,
-            ref: c.id,
-            title: firstLine,
-            url: c.url,
-            author: (c.author?.username ?? c.author?.name ?? '').slice(0, 120),
-            branch,
-            occurredAt: c.timestamp ? new Date(c.timestamp) : new Date(),
-          })
-        )
-          linked++;
+        const isNew = await upsertLink(task, {
+          kind: 'commit',
+          repo,
+          ref: c.id,
+          title: firstLine,
+          url: c.url,
+          author: (c.author?.username ?? c.author?.name ?? '').slice(0, 120),
+          branch,
+          occurredAt: at,
+        });
+        if (isNew) linked++;
         if (cfg.moveOnFix && refs.fixes.includes(key)) {
           const fresh = await Task.findById(task._id).lean();
           if (
@@ -359,9 +369,43 @@ export async function handleGithubEvent(
             await markMoved('commit', repo, c.id, task._id);
           }
         }
+        // Smart commits run once per commit and task (not again when pushed to another branch).
+        if (!isNew || !lines.some((l) => l.keys.includes(key))) continue;
+        if (committer === undefined)
+          committer = await resolveCommitter({
+            email: c.author?.email ?? null,
+            name: c.author?.name ?? '',
+          });
+        if (!committer) {
+          smart.unknownCommitter++;
+          continue;
+        }
+        const fresh = await Task.findById(task._id).lean();
+        if (!fresh) continue;
+        const actions = await runSmartCommit(committer, fresh, lines, {
+          providerLabel: providerLabel(),
+          requestId,
+          commit: { sha: c.id, firstLine, at },
+        });
+        smart.tasks++;
+        if (actions.length)
+          await GitLink.updateOne(
+            { provider: provider(), kind: 'commit', repo, ref: c.id, taskId: task._id },
+            { $set: { actions } },
+          );
       }
     }
-    return finish({ outcome: `push: ${linked} link(s), ${moved.length} moved`, linked, moved });
+    const notes = [
+      smart.tasks ? `smart commits on ${smart.tasks} task(s)` : '',
+      smart.unknownCommitter
+        ? `${smart.unknownCommitter} smart commit(s) skipped: the commit e-mail matches no single active user`
+        : '',
+    ].filter(Boolean);
+    return finish({
+      outcome: [`push: ${linked} link(s), ${moved.length} moved`, ...notes].join(', '),
+      linked,
+      moved,
+    });
   }
 
   if (event === 'pull_request' && body.pull_request) {
@@ -444,7 +488,7 @@ interface GitlabPayload {
     message: string;
     url: string;
     timestamp?: string;
-    author?: { name?: string };
+    author?: { name?: string; email?: string };
   }[];
   user?: { username?: string };
   object_attributes?: {
@@ -468,7 +512,10 @@ export function fromGitlab(header: string, raw: unknown): Normalised {
       payload: {
         ref: b.ref,
         repository,
-        commits: (b.commits ?? []).map((c) => ({ ...c, author: { name: c.author?.name } })),
+        commits: (b.commits ?? []).map((c) => ({
+          ...c,
+          author: { name: c.author?.name, email: c.author?.email },
+        })),
       },
     };
   if (
@@ -537,7 +584,11 @@ export function fromBitbucket(eventKey: string, raw: unknown): Normalised {
         message: c.message,
         url: c.links?.html?.href ?? '',
         timestamp: c.date,
-        author: { name: c.author?.user?.display_name ?? c.author?.raw?.replace(/\s*<.*>$/, '') },
+        // "Name <email>"
+        author: {
+          name: c.author?.user?.display_name ?? c.author?.raw?.replace(/\s*<.*>$/, ''),
+          email: /<([^<>\s]+@[^<>\s]+)>\s*$/.exec(c.author?.raw ?? '')?.[1],
+        },
       })),
     );
     const branch = b.push?.changes?.find((ch) => ch.new?.type === 'branch')?.new?.name;

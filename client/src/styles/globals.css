@@ -179,6 +179,31 @@
   .tabular {
     font-variant-numeric: tabular-nums;
   }
+  /* Thin scrollbars on a transparent track, so no white strip shows on dark or grey surfaces. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--muted-foreground) 45%, transparent) transparent;
+  }
+  .sidebar-scroll {
+    scrollbar-color: color-mix(in oklab, var(--sidebar-muted) 55%, transparent) transparent;
+  }
+  /* Browsers without scrollbar-color (older Safari). */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 9999px;
+    background: color-mix(in oklab, var(--muted-foreground) 45%, transparent) padding-box;
+  }
+  .sidebar-scroll::-webkit-scrollbar-thumb {
+    background: color-mix(in oklab, var(--sidebar-muted) 55%, transparent) padding-box;
+  }
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

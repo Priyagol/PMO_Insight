@@ -3,7 +3,12 @@ import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { eventBus } from '../src/core/events';
 import { AuditLog } from '../src/modules/audit/audit-log.model';
+import { Comment } from '../src/modules/collab/collab.models';
+import { Notification } from '../src/modules/notifications/notification.model';
+import { Project } from '../src/modules/projects/project.model';
 import { Task } from '../src/modules/tasks/task.model';
+import { Worklog } from '../src/modules/tracking/tracking.models';
+import { TaskTransition } from '../src/modules/workflows/workflow.models';
 import { createDepartment, loginAs, useHarness } from './helpers/harness';
 
 const h = useHarness();
@@ -28,14 +33,19 @@ function deliver(
     .set('X-Hub-Signature-256', sign(body, opts.secret))
     .send(body);
 }
-const push = (commits: { id: string; message: string }[], repo = REPO) => ({
-  ref: 'refs/heads/feature/login',
+const push = (
+  commits: { id: string; message: string; email?: string; timestamp?: string }[],
+  repo = REPO,
+  ref = 'refs/heads/feature/login',
+) => ({
+  ref,
   repository: { full_name: repo },
   commits: commits.map((c) => ({
-    ...c,
+    id: c.id,
+    message: c.message,
     url: `https://github.com/${repo}/commit/${c.id}`,
-    timestamp: '2026-11-07T10:00:00+05:30',
-    author: { name: 'Dev One', username: 'dev-one' },
+    timestamp: c.timestamp ?? '2026-11-07T10:00:00+05:30',
+    author: { name: 'Dev One', username: 'dev-one', email: c.email },
   })),
 });
 const sha = (n: number) => n.toString(16).padStart(40, 'a');
@@ -266,5 +276,137 @@ describe('commits and pull requests', () => {
     await deliver('push', push([{ id: sha(30), message: `${t.key} start` }]));
     const outsider = await loginAs(h.app, 'developer');
     expect((await api().get(`/api/v1/tasks/${t.id}/git`).set(outsider.auth)).status).toBe(404);
+  });
+});
+
+describe('smart commits (Jira syntax)', () => {
+  it('comments, logs time and moves the task as the committer, once per commit', async () => {
+    const { admin, dev, mk } = await setup();
+    await enable(admin);
+    const t = await mk('Login timeout on Safari', 'in_progress');
+    const now = new Date().toISOString();
+    const message = `${t.key} #comment Added retry with backoff #time 1h 30m Debugging #in-review`;
+    const res = await deliver(
+      'push',
+      push([{ id: sha(40), message, email: dev.user.email.toUpperCase(), timestamp: now }]),
+    );
+    expect(res.status).toBe(200);
+    await eventBus.settle();
+    expect(res.body.data.outcome).toContain('smart commits on 1 task(s)');
+
+    const task = (await Task.findById(t.id).lean())!;
+    expect(task.status).toBe('in_review');
+    const comments = await Comment.find({ entityId: task._id }).lean();
+    expect(comments).toHaveLength(1);
+    expect(comments[0]).toMatchObject({ body: 'Added retry with backoff', authorId: dev.user._id });
+    const logs = await Worklog.find({ taskId: task._id }).lean();
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({ userId: dev.user._id, minutes: 90, description: 'Debugging' });
+    const history = await TaskTransition.find({ taskId: task._id, to: 'in_review' }).lean();
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({ via: 'git', actorId: dev.user._id });
+
+    const links = (await api().get(`/api/v1/tasks/${t.id}/git`).set(dev.auth)).body.data;
+    expect(links[0].actions).toEqual(['Comment added', 'Logged 1h 30m', 'Moved to In Review']);
+
+    // The same commit pushed to another branch (a new delivery) does nothing again.
+    await deliver(
+      'push',
+      push(
+        [{ id: sha(40), message, email: dev.user.email, timestamp: now }],
+        REPO,
+        'refs/heads/main',
+      ),
+    );
+    await eventBus.settle();
+    expect(await Comment.countDocuments({ entityId: task._id })).toBe(1);
+    expect(await Worklog.countDocuments({ taskId: task._id })).toBe(1);
+  });
+
+  it('a short name is enough, commands follow the workflow, and failures are sent to the committer', async () => {
+    const { admin, dev, mk } = await setup();
+    await enable(admin);
+    const t = await mk('Session banner'); // To do
+    // "#start" = Start progress (To do → Done directly is not allowed).
+    await deliver(
+      'push',
+      push([{ id: sha(50), message: `${t.key} #start #done Finished`, email: dev.user.email }]),
+    );
+    await eventBus.settle();
+    expect((await Task.findById(t.id).lean())!.status).toBe('done');
+    // Commands run in order: after #start, Done is allowed, and its text becomes the comment.
+    const [failure] = await Notification.find({
+      userId: dev.user._id,
+      type: 'smart_commit',
+    }).lean();
+    expect(failure).toBeUndefined();
+    expect((await TaskTransition.findOne({ taskId: t.id, to: 'done' }).lean())?.comment).toBe(
+      'Finished',
+    );
+
+    const u = await mk('Another');
+    await deliver(
+      'push',
+      push([{ id: sha(51), message: `${u.key} #deploy-now`, email: dev.user.email }]),
+    );
+    await eventBus.settle();
+    const [note] = await Notification.find({ userId: dev.user._id, type: 'smart_commit' }).lean();
+    expect(note!.title).toContain(`${u.key} not carried out`);
+    expect(note!.body).toContain('"#deploy-now" is not a move');
+    expect(note!.body).toContain('#in-progress');
+  });
+
+  it("uses the committer's own permissions and skips unknown committers", async () => {
+    const { admin, dev, mk } = await setup();
+    await enable(admin);
+    const t = await mk('Owned by dev', 'in_progress');
+    const other = await loginAs(h.app, 'developer');
+    const task = (await Task.findById(t.id).lean())!;
+    await Project.updateOne(
+      { _id: task.projectId },
+      { $push: { members: { userId: other.user._id, role: 'member' } } },
+    );
+    await deliver(
+      'push',
+      push([
+        {
+          id: sha(60),
+          message: `${t.key} #comment Looked at it #in-review`,
+          email: other.user.email,
+        },
+      ]),
+    );
+    await eventBus.settle();
+    // Any team member may comment; only the assignee or reporter may move a developer's task.
+    expect(await Comment.countDocuments({ entityId: task._id, authorId: other.user._id })).toBe(1);
+    expect((await Task.findById(t.id).lean())!.status).toBe('in_progress');
+    expect(
+      await Notification.countDocuments({ userId: other.user._id, type: 'smart_commit' }),
+    ).toBe(1);
+
+    const unknown = await deliver(
+      'push',
+      push([{ id: sha(61), message: `${t.key} #in-review`, email: 'someone@elsewhere.test' }]),
+    );
+    expect(unknown.body.data.outcome).toContain('1 smart commit(s) skipped');
+    expect((await Task.findById(t.id).lean())!.status).toBe('in_progress');
+    void dev;
+  });
+
+  it('can be switched off', async () => {
+    const { admin, dev, mk } = await setup();
+    await api()
+      .put('/api/v1/integrations/github')
+      .set(admin.auth)
+      .send({ enabled: true, repos: [REPO], moveOnFix: true, smartCommits: false });
+    const t = await mk('Off', 'in_progress');
+    await deliver(
+      'push',
+      push([{ id: sha(70), message: `${t.key} #in-review`, email: dev.user.email }]),
+    );
+    expect((await Task.findById(t.id).lean())!.status).toBe('in_progress');
+    expect(
+      (await api().get('/api/v1/integrations/github').set(admin.auth)).body.data.smartCommits,
+    ).toBe(false);
   });
 });

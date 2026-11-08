@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { gitSettingsSchema, parseGitReferences } from './integrations';
+import {
+  gitSettingsSchema,
+  normaliseTransitionName,
+  parseGitReferences,
+  parseSmartCommits,
+} from './integrations';
 
 describe('parseGitReferences', () => {
   it('finds task keys in commit messages, PR text and branch names', () => {
@@ -41,5 +46,45 @@ describe('parseGitReferences', () => {
         moveOnFix: true,
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('parseSmartCommits', () => {
+  it('reads Jira-style commands with their arguments', () => {
+    expect(
+      parseSmartCommits('TRD-42 #comment Fixed the timeout #time 1w 2d 4h 30m Tuning #in-review'),
+    ).toEqual([
+      {
+        keys: ['TRD-42'],
+        commands: [
+          { kind: 'comment', text: 'Fixed the timeout' },
+          { kind: 'time', minutes: 2400 + 960 + 240 + 30, text: 'Tuning' },
+          { kind: 'transition', name: 'in-review', text: '' },
+        ],
+      },
+    ]);
+    expect(parseSmartCommits('JRA-1 JRA-2 #done Shipped')).toEqual([
+      {
+        keys: ['JRA-1', 'JRA-2'],
+        commands: [{ kind: 'transition', name: 'done', text: 'Shipped' }],
+      },
+    ]);
+    expect(parseSmartCommits('TRD-7 #time 1.5h')[0]!.commands).toEqual([
+      { kind: 'time', minutes: 90, text: '' },
+    ]);
+  });
+
+  it('keeps commands on their own line and ignores keys, issue numbers and empty commands', () => {
+    expect(
+      parseSmartCommits('TRD-1 #start-progress\n\nTRD-2 #comment Second line\n#done with no key'),
+    ).toEqual([
+      { keys: ['TRD-1'], commands: [{ kind: 'transition', name: 'start-progress', text: '' }] },
+      { keys: ['TRD-2'], commands: [{ kind: 'comment', text: 'Second line' }] },
+    ]);
+    // "#TRD-42" is a key mention, "#12" a pull request, "a#b" not a command.
+    expect(parseSmartCommits('Work on #TRD-42, see #12 and a#b')).toEqual([]);
+    expect(parseSmartCommits('TRD-3 #comment')).toEqual([]);
+    expect(parseSmartCommits('TRD-3 #time soon')).toEqual([]);
+    expect(normaliseTransitionName('Start_progress  -now')).toBe('start progress now');
   });
 });

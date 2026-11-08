@@ -31,7 +31,10 @@ export function BrandMark({ collapsed }: { collapsed: boolean }) {
 /** Permission-filtered navigation. Used by the desktop sidebar and the mobile drawer. */
 export function SidebarNav({ sections, collapsed, onNavigate }: SidebarNavProps) {
   return (
-    <nav aria-label="Main navigation" className="flex-1 space-y-5 overflow-y-auto px-3 py-3">
+    <nav
+      aria-label="Main navigation"
+      className="sidebar-scroll flex-1 space-y-5 overflow-y-auto px-3 py-3"
+    >
       {sections.map((section) => (
         <div key={section.id}>
           {!collapsed ? (

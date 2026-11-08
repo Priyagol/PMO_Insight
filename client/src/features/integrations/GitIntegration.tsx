@@ -17,10 +17,11 @@ function Editor({ data }: { data: GitSettingsDto }) {
   const qc = useQueryClient();
   const [enabled, setEnabled] = useState(data.enabled);
   const [moveOnFix, setMoveOnFix] = useState(data.moveOnFix);
+  const [smartCommits, setSmartCommits] = useState(data.smartCommits);
   const [repos, setRepos] = useState(data.repos);
   const [draft, setDraft] = useState('');
   const save = useMutation({
-    mutationFn: () => gitApi.saveGitSettings({ enabled, moveOnFix, repos }),
+    mutationFn: () => gitApi.saveGitSettings({ enabled, moveOnFix, smartCommits, repos }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: KEY });
       toast.success('GitHub integration saved');
@@ -86,6 +87,30 @@ function Editor({ data }: { data: GitSettingsDto }) {
         Move the task to <strong>In review</strong> when a commit or pull request says &quot;fixes
         TRD-42&quot; (also closes / resolves)
       </label>
+      <div className="space-y-1">
+        <label className="flex items-center gap-2 text-sm">
+          <Checkbox
+            checked={smartCommits}
+            disabled={!edit}
+            onCheckedChange={(c) => setSmartCommits(c === true)}
+          />
+          Smart commits: carry out <code className="font-mono">#comment</code>,{' '}
+          <code className="font-mono">#time</code> and status commands in commit messages
+        </label>
+        <p className="pl-6 text-xs text-muted-foreground">
+          Example:{' '}
+          <code className="font-mono">
+            TRD-42 #comment Fixed the timeout #time 1h 30m #in-review
+          </code>
+          . A status command is the name of a workflow move or of the status it leads to, with
+          hyphens for spaces (<code className="font-mono">#in-progress</code>,{' '}
+          <code className="font-mono">#testing</code>, <code className="font-mono">#done</code>).
+          Commands run as the person whose commit e-mail address (git config user.email) matches
+          their account, with that person&apos;s permissions; anything that cannot be done is sent
+          to them as a notification. Each commit is carried out once, even when pushed to several
+          branches.
+        </p>
+      </div>
       <div className="space-y-2">
         <p className="text-sm font-medium">Repositories accepted</p>
         <ul className="flex flex-wrap gap-1.5">
@@ -192,6 +217,9 @@ function LinkRow({ l }: { l: GitLinkDto }) {
           {l.state ? ` · ${l.state}` : ''}
           {l.movedTask ? ' · moved this task to In review' : ''}
         </p>
+        {l.actions.length ? (
+          <p className="text-xs text-muted-foreground">Smart commit: {l.actions.join(' · ')}</p>
+        ) : null}
       </div>
     </li>
   );

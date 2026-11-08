@@ -3,6 +3,7 @@ import { eventBus, type DomainEvent } from '../../core/events';
 import { addDaysIso, orgToday } from '../../core/time';
 import { Project } from '../projects/project.model';
 import { Risk } from '../risks/risk.model';
+import { Role } from '../roles/role.model';
 import { Task } from '../tasks/task.model';
 import { AssignmentPlan } from '../tracking/tracking.models';
 import { User } from '../users/user.model';
@@ -12,6 +13,21 @@ const taskLink = (id: string) => `/tasks/mine?task=${id}`;
 const actorOf = (e: DomainEvent) => e.actorId ?? null;
 const name = async (id: string | undefined | null) =>
   id ? ((await User.findById(id).select('name').lean())?.name ?? 'Someone') : 'Someone';
+
+/** Active project members (not viewers) who hold the QA / Tester role. */
+async function projectTesters(projectId: unknown): Promise<string[]> {
+  const [project, role] = await Promise.all([
+    Project.findById(projectId).select('members').lean(),
+    Role.findOne({ key: 'qa_tester' }).select('_id').lean(),
+  ]);
+  if (!project || !role) return [];
+  const memberIds = project.members.filter((m) => m.role !== 'viewer').map((m) => m.userId);
+  if (!memberIds.length) return [];
+  const users = await User.find({ _id: { $in: memberIds }, roleIds: role._id, status: 'active' })
+    .select('_id')
+    .lean();
+  return users.map((u) => u._id.toString());
+}
 
 /** Turns domain events into notifications. Registered once by the API process. */
 export function registerNotificationSubscribers(): () => void {
@@ -63,13 +79,25 @@ export function registerNotificationSubscribers(): () => void {
         to: TaskStatus;
       };
       const t = await Task.findById(taskId)
-        .select('key title watcherIds assigneeId reporterId')
+        .select('key title projectId watcherIds assigneeId reporterId')
         .lean();
       if (!t) return;
-      await notify([...t.watcherIds, t.assigneeId], {
+      const followers = [...t.watcherIds, t.assigneeId];
+      await notify(followers, {
         type: 'task_status',
         title: `${t.key} moved to ${STATUS_LABELS[to]}`,
         body: `${t.title} (was ${STATUS_LABELS[from]})`,
+        link: taskLink(taskId),
+        actorId: actorOf(e),
+      });
+      if (to !== 'testing') return;
+      // Testers on the project hear about work that is ready for them, even if they don't follow it.
+      const already = new Set(followers.filter(Boolean).map(String));
+      const testers = (await projectTesters(t.projectId)).filter((id) => !already.has(id));
+      await notify(testers, {
+        type: 'task_status',
+        title: `${t.key} is ready for testing`,
+        body: t.title,
         link: taskLink(taskId),
         actorId: actorOf(e),
       });

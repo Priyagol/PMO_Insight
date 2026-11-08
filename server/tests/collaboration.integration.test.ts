@@ -58,6 +58,63 @@ const notesOf = async (userId: Types.ObjectId, type?: NotificationType) =>
   Notification.find(type ? { userId, type } : { userId }).lean();
 
 describe('notifications', () => {
+  it('tells the project testers when a task is ready for testing', async () => {
+    const { dept, pm, dev, project } = await setup();
+    const tester = await loginAs(h.app, 'qa_tester', { departmentId: dept._id });
+    const watchingTester = await loginAs(h.app, 'qa_tester', { departmentId: dept._id });
+    const viewerTester = await loginAs(h.app, 'qa_tester', { departmentId: dept._id });
+    const otherTester = await loginAs(h.app, 'qa_tester', { departmentId: dept._id });
+    await Project.updateOne(
+      { _id: project.id },
+      {
+        $push: {
+          members: {
+            $each: [
+              { userId: tester.user._id, role: 'member' },
+              { userId: watchingTester.user._id, role: 'member' },
+              { userId: viewerTester.user._id, role: 'viewer' },
+            ],
+          },
+        },
+      },
+    );
+    const t = await api().post('/api/v1/tasks').set(pm.auth).send({
+      projectId: project.id,
+      title: 'Checkout page',
+      assigneeId: dev.user._id.toString(),
+    });
+    expect(t.status).toBe(201);
+    await Task.updateOne(
+      { _id: t.body.data.id },
+      { $set: { status: 'in_review' }, $addToSet: { watcherIds: watchingTester.user._id } },
+    );
+
+    const moved = await api()
+      .patch(`/api/v1/tasks/${t.body.data.id}`)
+      .set(dev.auth)
+      .send({ status: 'testing' });
+    expect(moved.status).toBe(200);
+    await eventBus.settle();
+
+    const [ready] = await notesOf(tester.user._id, 'task_status');
+    expect(ready).toMatchObject({
+      title: `${t.body.data.key} is ready for testing`,
+      link: `/tasks/mine?task=${t.body.data.id}`,
+    });
+    // A tester who already follows the task gets the usual status update, not a second one.
+    const watching = await notesOf(watchingTester.user._id, 'task_status');
+    expect(watching.map((n) => n.title)).toEqual([`${t.body.data.key} moved to Testing`]);
+    // Viewers, testers outside the project and the person who moved it hear nothing.
+    expect(await notesOf(viewerTester.user._id)).toHaveLength(0);
+    expect(await notesOf(otherTester.user._id)).toHaveLength(0);
+    expect(await notesOf(dev.user._id, 'task_status')).toHaveLength(0);
+
+    // Other moves don't page the testers.
+    await api().patch(`/api/v1/tasks/${t.body.data.id}`).set(dev.auth).send({ status: 'done' });
+    await eventBus.settle();
+    expect(await notesOf(tester.user._id, 'task_status')).toHaveLength(1);
+  });
+
   it('notifies assignees and mentioned people (never the actor) in-app and by e-mail, respecting preferences', async () => {
     const { pm, dev, project } = await setup();
     const t = await api().post('/api/v1/tasks').set(pm.auth).send({

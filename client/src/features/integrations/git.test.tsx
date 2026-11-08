@@ -22,6 +22,7 @@ const settings = {
   enabled: false,
   repos: [] as string[],
   moveOnFix: true,
+  smartCommits: true,
   secretConfigured: false,
   webhookPath: '/api/v1/integrations/github/webhook',
   lastDelivery: null,
@@ -56,11 +57,13 @@ describe('GitHub integration settings', () => {
     await user.click(
       within(panel).getByRole('checkbox', { name: /Link commits and pull requests/ }),
     );
+    await user.click(within(panel).getByRole('checkbox', { name: /Smart commits/ }));
     await user.click(within(panel).getByRole('button', { name: 'Save GitHub settings' }));
     await waitFor(() =>
       expect(api.saveGitSettings).toHaveBeenCalledWith({
         enabled: true,
         moveOnFix: true,
+        smartCommits: false,
         repos: ['arihant/trading-platform'],
       }),
     );
@@ -80,6 +83,7 @@ describe('Task development section', () => {
         author: 'dev-one',
         branch: 'feature/login',
         movedTask: true,
+        actions: ['Comment added', 'Logged 1h 30m'],
         at: '2026-11-07T04:30:00.000Z',
       },
       {
@@ -92,6 +96,7 @@ describe('Task development section', () => {
         author: 'dev-one',
         state: 'merged',
         movedTask: false,
+        actions: [],
         at: '2026-11-07T05:00:00.000Z',
       },
     ]);
@@ -102,6 +107,7 @@ describe('Task development section', () => {
       'https://github.com/arihant/trading-platform/commit/abc1234',
     );
     expect(section).toHaveTextContent('moved this task to In review');
+    expect(section).toHaveTextContent('Smart commit: Comment added · Logged 1h 30m');
     expect(section).toHaveTextContent('merged');
   });
 

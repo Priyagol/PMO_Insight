@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "seed:admin": "tsx --env-file-if-exists=.env src/scripts/seed-admin.ts",
+    "reset:password": "tsx --env-file-if-exists=.env src/scripts/reset-password.ts",
     "seed:dev": "tsx --env-file-if-exists=.env src/scripts/seed-dev.ts"
   },
   "dependencies": {

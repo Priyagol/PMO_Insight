@@ -18,6 +18,8 @@ export interface IGitLink {
   branch?: string | null;
   state?: 'open' | 'merged' | 'closed' | null;
   movedTask: boolean;
+  /** Smart-commit commands carried out on the task. */
+  actions?: string[];
   occurredAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -37,6 +39,7 @@ const linkSchema = new Schema<IGitLink>(
     branch: { type: String, default: null, maxlength: 250 },
     state: { type: String, enum: ['open', 'merged', 'closed', null], default: null },
     movedTask: { type: Boolean, default: false },
+    actions: { type: [String], default: [] },
     occurredAt: { type: Date, required: true },
   },
   { timestamps: true, collection: 'gitLinks' },
