@@ -27,16 +27,52 @@ function cookieOptions(expires?: Date): CookieOptions {
   };
 }
 
-function respondWithSession(res: Response, result: auth.LoginResult): void {
-  res.cookie(REFRESH_COOKIE, result.refreshToken, cookieOptions(result.refreshExpiresAt));
+/**
+ * Each browser tab sends its own id in this header and gets its own refresh cookie, so a new
+ * tab or window starts signed out and different people can work in different tabs. Per-tab
+ * cookies last only for the browser session. Requests without the header (single sign-on
+ * callback, API clients) use the shared cookie.
+ */
+export const TAB_HEADER = 'x-session-tab';
+const TAB_ID = /^[A-Za-z0-9_-]{8,64}$/;
+
+export function sessionTab(req: Request): string | null {
+  const v = req.get(TAB_HEADER);
+  return v && TAB_ID.test(v) ? v : null;
+}
+
+const cookieName = (tab: string | null) => (tab ? `${REFRESH_COOKIE}_${tab}` : REFRESH_COOKIE);
+const readCookie = (req: Request, name: string): string | undefined => {
+  const value = (req.cookies as Record<string, unknown> | undefined)?.[name];
+  return typeof value === 'string' ? value : undefined;
+};
+
+/** Sets the refresh cookie for this tab (a browser-session cookie) or the shared one. */
+export function setRefreshCookie(
+  req: Request,
+  res: Response,
+  result: { refreshToken: string; refreshExpiresAt: Date },
+): void {
+  const tab = sessionTab(req);
+  res.cookie(
+    cookieName(tab),
+    result.refreshToken,
+    cookieOptions(tab ? undefined : result.refreshExpiresAt),
+  );
+}
+
+function clearRefreshCookie(req: Request, res: Response): void {
+  res.clearCookie(cookieName(sessionTab(req)), cookieOptions());
+}
+
+function respondWithSession(req: Request, res: Response, result: auth.LoginResult): void {
+  setRefreshCookie(req, res, result);
   const body: LoginResponse = { accessToken: result.accessToken, ...result.session };
   sendOk(res, body);
 }
 
-const presentedToken = (req: Request): string | undefined => {
-  const value = (req.cookies as Record<string, unknown> | undefined)?.[REFRESH_COOKIE];
-  return typeof value === 'string' ? value : undefined;
-};
+const presentedToken = (req: Request): string | undefined =>
+  readCookie(req, cookieName(sessionTab(req)));
 
 export async function loginHandler(req: Request, res: Response): Promise<void> {
   const outcome = await auth.login(requestContext(req), req.valid!.body as LoginInput);
@@ -49,12 +85,12 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
     });
     return;
   }
-  respondWithSession(res, outcome);
+  respondWithSession(req, res, outcome);
 }
 
 export async function mfaLoginHandler(req: Request, res: Response): Promise<void> {
   const { mfaToken, code } = req.valid!.body as { mfaToken: string; code: string };
-  respondWithSession(res, await auth.loginWithMfa(requestContext(req), mfaToken, code));
+  respondWithSession(req, res, await auth.loginWithMfa(requestContext(req), mfaToken, code));
 }
 
 export async function mfaSetupHandler(req: Request, res: Response): Promise<void> {
@@ -67,7 +103,7 @@ export async function mfaEnableHandler(req: Request, res: Response): Promise<voi
   const rc = requestContext(req);
   if (mfaToken) {
     const { recoveryCodes, result } = await auth.enrollAndLogin(rc, mfaToken, code);
-    res.cookie(REFRESH_COOKIE, result.refreshToken, cookieOptions(result.refreshExpiresAt));
+    setRefreshCookie(req, res, result);
     sendOk(res, { recoveryCodes, session: { accessToken: result.accessToken, ...result.session } });
     return;
   }
@@ -83,23 +119,32 @@ export async function authConfigHandler(_req: Request, res: Response): Promise<v
 export { cookieOptions, respondWithSession };
 
 export async function refreshHandler(req: Request, res: Response): Promise<void> {
+  // A tab with no session of its own takes over a shared one once (after single sign-on, or a
+  // sign-in from before per-tab sessions). The shared cookie is then removed, so other tabs
+  // still have to sign in.
+  let token = presentedToken(req);
+  const tab = sessionTab(req);
+  if (!token && tab) {
+    token = readCookie(req, REFRESH_COOKIE);
+    if (token) res.clearCookie(REFRESH_COOKIE, cookieOptions());
+  }
   try {
-    respondWithSession(res, await auth.refresh(requestContext(req), presentedToken(req)));
+    respondWithSession(req, res, await auth.refresh(requestContext(req), token));
   } catch (err) {
-    res.clearCookie(REFRESH_COOKIE, cookieOptions());
+    clearRefreshCookie(req, res);
     throw err;
   }
 }
 
 export async function logoutHandler(req: Request, res: Response): Promise<void> {
   await auth.logout(requestContext(req), presentedToken(req));
-  res.clearCookie(REFRESH_COOKIE, cookieOptions());
+  clearRefreshCookie(req, res);
   sendNoContent(res);
 }
 
 export async function logoutAllHandler(req: Request, res: Response): Promise<void> {
   await auth.logoutAll(requestContext(req));
-  res.clearCookie(REFRESH_COOKIE, cookieOptions());
+  clearRefreshCookie(req, res);
   sendNoContent(res);
 }
 
@@ -109,6 +154,7 @@ export async function meHandler(req: Request, res: Response): Promise<void> {
 
 export async function changePasswordHandler(req: Request, res: Response): Promise<void> {
   respondWithSession(
+    req,
     res,
     await auth.changePassword(requestContext(req), req.valid!.body as ChangePasswordInput),
   );

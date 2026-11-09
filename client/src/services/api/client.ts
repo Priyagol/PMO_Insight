@@ -1,3 +1,4 @@
+import { sessionTabId } from '@/lib/session-tab';
 import axios, {
   AxiosError,
   type AxiosAdapter,
@@ -97,6 +98,7 @@ export function createApiClient(options: ApiClientOptions = {}): AxiosInstance {
   instance.interceptors.request.use((config) => {
     const token = tokenStore.get();
     if (token) config.headers.set('Authorization', `Bearer ${token}`);
+    config.headers.set('X-Session-Tab', sessionTabId());
     return config;
   });
 
