@@ -2,6 +2,7 @@ import mongoose, { Types, type QueryFilter } from 'mongoose';
 import {
   DEFAULT_WORKFLOW,
   DEFAULT_TASK_EFFORT_HOURS,
+  STATUS_LABELS,
   addDays,
   createProjectSchema,
   duplicateProjectSchema,
@@ -145,6 +146,7 @@ async function present(auth: AuthContext, projects: IProject[]): Promise<Project
   for (const p of projects) {
     userIds.add(p.managerId.toString());
     if (p.ownerId) userIds.add(p.ownerId.toString());
+    if (p.hold?.byId) userIds.add(p.hold.byId.toString());
     p.members.forEach((m) => userIds.add(m.userId.toString()));
     if (p.departmentId) deptIds.add(p.departmentId.toString());
   }
@@ -210,6 +212,15 @@ async function present(auth: AuthContext, projects: IProject[]): Promise<Project
       components: (p.components ?? []).map((c) => c.name),
       workflow: workflowDto(p),
       confidential: p.confidential ?? false,
+      hold:
+        p.status === 'on_hold' && p.hold
+          ? {
+              reason: p.hold.reason,
+              since: p.hold.since.toISOString(),
+              by: userMap.get(p.hold.byId.toString()) ?? null,
+              until: p.hold.until ?? undefined,
+            }
+          : null,
       version: p.version,
       progress: progress.get(p._id.toString()) ?? EMPTY_PROGRESS,
       can: {
@@ -497,11 +508,45 @@ export async function updateProject(
   if (slipped && !input.dateChangeReason)
     throw new UnprocessableError('Give a reason for moving the end date later');
 
+  // On hold: a reason is required; it is shown on the project until the project resumes.
+  const status = (next.status as string | undefined) ?? before.status;
+  const holding = status === 'on_hold';
+  const startsHold = holding && before.status !== 'on_hold';
+  const endsHold = !holding && before.status === 'on_hold';
+  if (startsHold && !input.holdReason)
+    throw new UnprocessableError('Say why the project is being put on hold');
+  const holdUntil = input.holdUntil !== undefined ? input.holdUntil : (before.hold?.until ?? null);
+  if (holding && holdUntil && holdUntil < orgToday())
+    throw new UnprocessableError('The expected restart date cannot be in the past');
+  if (startsHold || (holding && !before.hold && input.holdReason)) {
+    next.hold = {
+      reason: input.holdReason ?? 'No reason recorded',
+      since: new Date(),
+      byId: auth.userObjectId,
+      until: holdUntil,
+    };
+  } else if (holding && before.hold) {
+    next.hold = {
+      ...before.hold,
+      reason: input.holdReason ?? before.hold.reason,
+      until: holdUntil,
+    };
+  } else if (endsHold) {
+    next.hold = null;
+  }
+
   const changes = diffFields(
     before as unknown as Record<string, unknown>,
     { ...before, ...next },
     VERSIONED_FIELDS,
   );
+  if (holding && !startsHold && before.hold && next.hold) {
+    const h = next.hold as { reason: string; until: string | null };
+    if (h.reason !== before.hold.reason)
+      changes.push({ field: 'holdReason', from: before.hold.reason, to: h.reason });
+    if ((h.until ?? null) !== (before.hold.until ?? null))
+      changes.push({ field: 'holdUntil', from: before.hold.until ?? null, to: h.until ?? null });
+  }
   if (changes.length === 0) return getProject(rc, id);
 
   // Optimistic concurrency on `version` so two editors cannot silently overwrite each other.
@@ -518,23 +563,39 @@ export async function updateProject(
     version: updated.version,
     changes,
     changedBy: auth.userObjectId,
-    reason: slipped ? input.dateChangeReason : null,
+    reason: startsHold ? input.holdReason : slipped ? input.dateChangeReason : null,
   });
+  const holdDays = before.hold
+    ? Math.max(1, Math.round((Date.now() - before.hold.since.getTime()) / 86_400_000))
+    : 0;
+  const holdSummary = startsHold
+    ? `put the project on hold: ${input.holdReason}${holdUntil ? ` (expected to restart ${holdUntil})` : ''}`
+    : endsHold
+      ? `took the project off hold (${STATUS_LABELS[updated.status]}) after ${holdDays} day${holdDays === 1 ? '' : 's'}`
+      : null;
   await recordActivity(rc, {
     projectId: before._id,
     entityType: 'project',
     entityId: before._id,
     entityLabel: `${before.key} ${updated.name}`,
     verb: 'updated',
-    summary: slipped
-      ? `moved the end date from ${before.endDate} to ${updated.endDate}: ${input.dateChangeReason}`
-      : `updated ${changes.map((c) => c.field).join(', ')}`,
+    summary: holdSummary
+      ? holdSummary
+      : slipped
+        ? `moved the end date from ${before.endDate} to ${updated.endDate}: ${input.dateChangeReason}`
+        : `updated ${changes.map((c) => c.field).join(', ')}`,
     changes,
   });
   if (changes.some((c) => c.field === 'status')) {
     eventBus.publish(
       'project.status_changed',
-      { projectId: id, from: before.status, to: updated.status },
+      {
+        projectId: id,
+        from: before.status,
+        to: updated.status,
+        holdReason: startsHold ? input.holdReason : undefined,
+        holdUntil: startsHold ? holdUntil : undefined,
+      },
       { actorId: auth.userId },
     );
   }

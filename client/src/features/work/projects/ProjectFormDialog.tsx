@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Controller, useFieldArray, useForm } from 'react-hook-form';
+import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { useNavigate } from 'react-router';
 import { z } from 'zod';
 import {
@@ -69,6 +69,8 @@ const formSchema = z
     objectives: z.array(z.object({ text: z.string().trim().max(300) })),
     autoAssign: z.boolean(),
     dateChangeReason: z.string(),
+    holdReason: z.string().max(500),
+    holdUntil: z.string(),
   })
   .refine((v) => !v.startDate || !v.endDate || v.startDate <= v.endDate, {
     message: 'End date must be on or after the start date',
@@ -96,6 +98,8 @@ function defaults(project: ProjectDto | undefined, me: UserRef | null): FormValu
     objectives: (project?.objectives ?? []).map((text) => ({ text })),
     autoAssign: project?.autoAssign ?? false,
     dateChangeReason: '',
+    holdReason: project?.hold?.reason ?? '',
+    holdUntil: project?.hold?.until ?? '',
   };
 }
 
@@ -163,6 +167,9 @@ export function ProjectFormDialog({
   // Moving the end date later is a slip: the API asks for a reason, kept in the delay history.
   const slipsLater = (end: string) => Boolean(project?.endDate && end && end > project.endDate);
   const watchedEnd = form.watch('endDate');
+  // Putting a project on hold needs a reason; it is shown on the project until it restarts.
+  const status = useWatch({ control: form.control, name: 'status' });
+  const onHold = status === 'on_hold' && Boolean(project);
 
   const save = useWorkMutation(
     (v: Parsed) => {
@@ -186,6 +193,9 @@ export function ProjectFormDialog({
         ? work.updateProject(project.id, {
             ...common,
             ...(slipsLater(v.endDate) ? { dateChangeReason: v.dateChangeReason.trim() } : {}),
+            ...(v.status === 'on_hold'
+              ? { holdReason: v.holdReason.trim(), holdUntil: v.holdUntil || null }
+              : {}),
           })
         : work.createProject({
             ...common,
@@ -200,6 +210,10 @@ export function ProjectFormDialog({
   const onSubmit = form.handleSubmit(async (v) => {
     if (slipsLater(v.endDate) && v.dateChangeReason.trim().length < 3) {
       form.setError('dateChangeReason', { message: 'Say why the end date is moving later' });
+      return;
+    }
+    if (project && v.status === 'on_hold' && v.holdReason.trim().length < 3) {
+      form.setError('holdReason', { message: 'Say why the project is on hold' });
       return;
     }
     const saved = await save.mutateAsync(v);
@@ -369,6 +383,22 @@ export function ProjectFormDialog({
                 )}
               />
             </FormField>
+            {onHold ? (
+              <>
+                <FormField
+                  className="sm:col-span-full"
+                  label="Why is the project on hold?"
+                  required
+                  hint="Shown on the project and sent to its members, e.g. Business priorities changed: budget moved to the CRM rollout."
+                  error={errors.holdReason?.message}
+                >
+                  <Textarea rows={2} maxLength={500} {...form.register('holdReason')} />
+                </FormField>
+                <FormField label="Expected restart" hint="Optional">
+                  <Input type="date" {...form.register('holdUntil')} />
+                </FormField>
+              </>
+            ) : null}
             <FormField label="Start date">
               <Input type="date" {...form.register('startDate')} />
             </FormField>

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Suspense, useState } from 'react';
 import { lazyFresh } from '@/lib/lazy-fresh';
+import { HoldBanner, HoldButton } from './ProjectHold';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   PROJECT_MEMBER_ROLES,
@@ -538,6 +539,7 @@ export function ProjectDetailPage() {
             </Button>
           ) : null}
           <ProjectSummaryButton projectId={p.id} />
+          <HoldButton project={p} />
           {p.can.update && p.status !== 'completed' && p.status !== 'cancelled' ? (
             <Button variant="outline" size="sm" onClick={() => setRequestingClosure(true)}>
               <BadgeCheck /> Request closure
@@ -562,6 +564,8 @@ export function ProjectDetailPage() {
           ) : null}
         </div>
       </div>
+
+      <HoldBanner project={p} />
 
       <Tabs defaultValue={tabParam ?? 'overview'}>
         <TabsList className="flex-wrap">

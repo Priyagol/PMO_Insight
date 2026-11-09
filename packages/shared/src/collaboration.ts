@@ -21,6 +21,7 @@ export const NOTIFICATION_TYPES = [
   'leave_requested',
   'leave_decided',
   'risk_alert',
+  'project_hold',
   'approval_requested',
   'approval_decided',
   'approval_reminder',
@@ -65,6 +66,11 @@ export const NOTIFICATION_CATALOGUE: Record<
   },
   leave_decided: { label: 'My leave request is decided', group: 'Time & leave', email: true },
   risk_alert: { label: 'Critical or escalated risk in my project', group: 'Projects', email: true },
+  project_hold: {
+    label: 'A project I am in is put on hold or restarted',
+    group: 'Projects',
+    email: true,
+  },
   approval_requested: { label: 'An approval awaits my decision', group: 'Approvals', email: true },
   approval_decided: {
     label: 'My request is approved or rejected',

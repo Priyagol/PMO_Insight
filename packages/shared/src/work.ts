@@ -149,6 +149,10 @@ export const updateProjectSchema = z
   .extend({
     /** Required when the end date moves later: why the project slipped (kept in its history). */
     dateChangeReason: z.string().trim().min(3, 'Give a short reason').max(500),
+    /** Required when the project is put on hold: why (for example, business priorities changed). */
+    holdReason: z.string().trim().min(3, 'Say why the project is on hold').max(500),
+    /** Optional date the project is expected to restart. */
+    holdUntil: dateString.nullable(),
   })
   .partial()
   .refine(datesInOrder, {
@@ -389,6 +393,13 @@ export interface ProjectProgress {
   byStatus: Partial<Record<TaskStatus, number>>;
 }
 
+export interface ProjectHoldDto {
+  reason: string;
+  since: string;
+  by: UserRef | null;
+  until?: string;
+}
+
 export interface ProjectDto {
   id: string;
   key: string;
@@ -421,6 +432,8 @@ export interface ProjectDto {
   components: string[];
   /** Phase 9E: only members and super administrators can see it. */
   confidential: boolean;
+  /** Set while the project is on hold: why, since when, by whom, and the expected restart. */
+  hold: ProjectHoldDto | null;
   /** Task workflow (Phase 9C): statuses in board order and their display names. */
   workflow: {
     id: string | null;

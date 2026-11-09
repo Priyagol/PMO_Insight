@@ -178,6 +178,39 @@ export function registerNotificationSubscribers(): () => void {
       }),
     ),
 
+    // A project put on hold or taken off hold: everyone on it, and the department head, is told.
+    eventBus.subscribe('project.status_changed', async (e) => {
+      const { projectId, from, to, holdReason, holdUntil } = e.payload as {
+        projectId: string;
+        from: string;
+        to: string;
+        holdReason?: string;
+        holdUntil?: string | null;
+      };
+      if (from !== 'on_hold' && to !== 'on_hold') return;
+      const p = await Project.findById(projectId)
+        .select('key name members managerId ownerId departmentId')
+        .lean();
+      if (!p) return;
+      const head = p.departmentId
+        ? (await Department.findById(p.departmentId).select('headId').lean())?.headId
+        : null;
+      const who = await name(actorOf(e));
+      await notify([...p.members.map((m) => m.userId), p.managerId, p.ownerId, head], {
+        type: 'project_hold',
+        title:
+          to === 'on_hold'
+            ? `${p.key} ${p.name} is on hold`
+            : `${p.key} ${p.name} is no longer on hold`,
+        body:
+          to === 'on_hold'
+            ? `${who}: ${holdReason ?? 'no reason given'}${holdUntil ? `. Expected to restart ${holdUntil}.` : '.'}`
+            : `${who} restarted the project (${STATUS_LABELS[to as TaskStatus] ?? to}).`,
+        link: `/projects/${projectId}`,
+        actorId: actorOf(e),
+      });
+    }),
+
     eventBus.subscribe('assignment.plan_executed', async (e) => {
       const { planId, assigned, conflicts } = e.payload as {
         planId: string;
@@ -200,15 +233,21 @@ export function registerNotificationSubscribers(): () => void {
  * Daily reminder (worker): tasks due tomorrow, and tasks that became overdue yesterday.
  * Each date matches once, so every task is reminded at most twice.
  */
+/** Projects on hold: their tasks get no due-date reminders or escalations until they restart. */
+const onHoldProjectIds = async () =>
+  (await Project.find({ status: 'on_hold' }).select('_id').lean()).map((p) => p._id);
+
 export async function sendDueReminders(today = orgToday()): Promise<number> {
   let sent = 0;
   const open = { $nin: ['done', 'cancelled'] as TaskStatus[] };
+  const paused = { $nin: await onHoldProjectIds() };
   const [dueSoon, overdue] = await Promise.all([
     Task.find({
       dueDate: addDaysIso(today, 1),
       status: open,
       deletedAt: null,
       assigneeId: { $ne: null },
+      projectId: paused,
     })
       .select('key title assigneeId')
       .lean(),
@@ -217,6 +256,7 @@ export async function sendDueReminders(today = orgToday()): Promise<number> {
       status: open,
       deletedAt: null,
       assigneeId: { $ne: null },
+      projectId: paused,
     })
       .select('key title assigneeId')
       .lean(),
@@ -262,6 +302,7 @@ export const OVERDUE_ESCALATION = { managers: 3, departmentHead: 7 } as const;
  */
 export async function escalateOverdue(today = orgToday()): Promise<number> {
   const open = { $nin: ['done', 'cancelled'] as TaskStatus[] };
+  const paused = { $nin: await onHoldProjectIds() };
   let sent = 0;
   for (const [level, days] of [
     ['managers', OVERDUE_ESCALATION.managers],
@@ -272,6 +313,7 @@ export async function escalateOverdue(today = orgToday()): Promise<number> {
       status: open,
       deletedAt: null,
       assigneeId: { $ne: null },
+      projectId: paused,
     })
       .select('key title assigneeId projectId')
       .lean();

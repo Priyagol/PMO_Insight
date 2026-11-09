@@ -47,7 +47,19 @@ const columns: ColumnDef<ProjectDto, unknown>[] = [
   {
     id: 'status',
     header: 'Status',
-    cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    cell: ({ row }) => {
+      const hold = row.original.hold;
+      return (
+        <div className="space-y-0.5">
+          <StatusBadge status={row.original.status} />
+          {hold ? (
+            <p className="max-w-56 truncate text-[11px] text-muted-foreground" title={hold.reason}>
+              {hold.reason}
+            </p>
+          ) : null}
+        </div>
+      );
+    },
   },
   {
     id: 'priority',

@@ -58,6 +58,7 @@ const project = (over: Partial<ProjectDto> = {}): ProjectDto => ({
   components: [],
   workflow: { id: null, name: 'Standard workflow', statuses: [], labels: {} },
   confidential: false,
+  hold: null,
   version: 1,
   progress: {
     totalTasks: 4,

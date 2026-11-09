@@ -56,6 +56,8 @@ export interface IProject {
   };
   /** Phase 9E: visible only to participants and super administrators. */
   confidential?: boolean;
+  /** Set while the project is on hold. */
+  hold?: { reason: string; since: Date; byId: Types.ObjectId; until?: string | null } | null;
   version: number;
   createdBy?: Types.ObjectId;
   createdAt: Date;
@@ -113,6 +115,18 @@ const projectSchema = new Schema<IProject>(
     wipLimits: { type: Schema.Types.Mixed, default: () => ({}) },
     workflowId: { type: Schema.Types.ObjectId, ref: 'TaskWorkflow', default: null },
     confidential: { type: Boolean, default: false },
+    hold: {
+      type: new Schema(
+        {
+          reason: { type: String, required: true, maxlength: 500 },
+          since: { type: Date, required: true },
+          byId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+          until: { type: String, default: null },
+        },
+        { _id: false },
+      ),
+      default: null,
+    },
     serviceDesk: {
       type: new Schema(
         {
