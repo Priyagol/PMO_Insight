@@ -5,7 +5,7 @@ import { routes } from '@/routes/routes';
 import { ApiClientError } from '@/services/api/client';
 import { renderRoutes } from '@/test/render';
 import { authenticatedStore, testUser } from '@/test/fixtures';
-import { sessionEnded } from '@/store/session-slice';
+import { sessionEnded, sessionStarted, signOutStarted } from '@/store/session-slice';
 import { safeNext } from '@/lib/redirect';
 
 vi.mock('@/services/api/auth', () => ({
@@ -36,6 +36,28 @@ describe('route guards', () => {
     });
     await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
     expect(router.state.location.search).toBe('');
+  });
+
+  it('a request failing during sign-out does not bring the old page back', async () => {
+    const store = authenticatedStore({ 'dashboard:view': 'own' });
+    const { router } = renderRoutes(routes, { path: '/my-workspace', store });
+    act(() => {
+      store.dispatch(signOutStarted());
+      // A poll on the open page hits 401 after the server revoked the session.
+      store.dispatch(sessionEnded());
+    });
+    await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
+    expect(router.state.location.search).toBe('');
+  });
+
+  it('signing in again clears the sign-out mark', () => {
+    const store = authenticatedStore({ 'dashboard:view': 'own' });
+    store.dispatch(signOutStarted());
+    store.dispatch(sessionEnded());
+    store.dispatch(sessionStarted({ user: testUser(), permissions: {} }));
+    expect(store.getState().session.signedOut).toBe(false);
+    store.dispatch(sessionEnded());
+    expect(store.getState().session.signedOut).toBe(false);
   });
 
   it('an expired session still remembers the page for the same person', async () => {

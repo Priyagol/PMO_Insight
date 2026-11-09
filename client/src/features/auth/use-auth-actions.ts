@@ -6,7 +6,7 @@ import type { LoginResponse } from '@arihant/shared';
 import { errorMessage } from '@/lib/errors';
 import { logout, logoutAll } from '@/services/api/auth';
 import { useAppDispatch } from '@/store';
-import { sessionEnded, sessionStarted } from '@/store/session-slice';
+import { sessionEnded, sessionStarted, signOutStarted } from '@/store/session-slice';
 
 export function useAuthActions() {
   const dispatch = useAppDispatch();
@@ -25,6 +25,7 @@ export function useAuthActions() {
   }, [dispatch, navigate, queryClient]);
 
   const signOut = useCallback(async () => {
+    dispatch(signOutStarted());
     try {
       await logout();
     } catch (err) {
@@ -32,9 +33,10 @@ export function useAuthActions() {
       toast.error(errorMessage(err));
     }
     end();
-  }, [end]);
+  }, [dispatch, end]);
 
   const signOutEverywhere = useCallback(async () => {
+    dispatch(signOutStarted());
     try {
       await logoutAll();
       toast.success('Signed out of all devices');
@@ -42,7 +44,7 @@ export function useAuthActions() {
       toast.error(errorMessage(err));
     }
     end();
-  }, [end]);
+  }, [dispatch, end]);
 
   return { startSession, signOut, signOutEverywhere };
 }

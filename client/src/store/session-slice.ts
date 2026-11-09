@@ -32,20 +32,30 @@ export const sessionSlice = createSlice({
   reducers: {
     sessionStarted(state, action: PayloadAction<SessionDto>) {
       state.status = 'authenticated';
+      state.signedOut = false;
       state.user = action.payload.user;
       state.permissions = action.payload.permissions;
     },
     sessionUserUpdated(state, action: PayloadAction<UserDto>) {
       state.user = action.payload;
     },
-    sessionEnded(_state, action: PayloadAction<{ signedOut?: boolean } | undefined>) {
+    /**
+     * Marks a deliberate sign-out before the server call. Requests still running on the open
+     * page fail once the session is revoked and end it as "expired"; this flag keeps that
+     * from carrying the old page over to the next person.
+     */
+    signOutStarted(state) {
+      state.signedOut = true;
+    },
+    sessionEnded(state, action: PayloadAction<{ signedOut?: boolean } | undefined>) {
       return {
         ...initialState,
         status: 'anonymous' as const,
-        signedOut: Boolean(action.payload?.signedOut),
+        signedOut: Boolean(action.payload?.signedOut) || state.signedOut,
       };
     },
   },
 });
 
-export const { sessionStarted, sessionUserUpdated, sessionEnded } = sessionSlice.actions;
+export const { sessionStarted, sessionUserUpdated, signOutStarted, sessionEnded } =
+  sessionSlice.actions;
