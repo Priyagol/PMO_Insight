@@ -18,7 +18,9 @@ import {
   timesheetQuerySchema,
   timesheetRejectSchema,
   timesheetWeekSchema,
+  capacityPlanQuerySchema,
   teamPerformanceQuerySchema,
+  type CapacityPlanQuery,
   teamSchema,
   updateTeamSchema,
   type TeamInput,
@@ -33,6 +35,7 @@ import { authenticate, authorize } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { recordAudit } from '../audit/audit.service';
 import * as assignment from '../assignment/assignment.service';
+import { capacityPlan } from './capacity.service';
 import { teamPerformance } from './performance.service';
 import * as teams from './team.service';
 import { getAssignmentConfig } from '../assignment/workload.service';
@@ -217,6 +220,9 @@ teamRoutes.get(
   },
 );
 
+teamRoutes.get('/capacity', validate({ query: capacityPlanQuerySchema }), async (req, res) => {
+  sendOk(res, await capacityPlan(requestContext(req), query<CapacityPlanQuery>(req)));
+});
 teamRoutes.get('/', async (req, res) => {
   sendOk(res, await teams.listTeams(requestContext(req)));
 });

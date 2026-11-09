@@ -23,6 +23,7 @@ import {
   WorkloadChart,
 } from '@/features/insights/charts';
 import { useDashboardActivity, useOverview } from '@/features/insights/hooks';
+import { RoleFocus } from '@/features/insights/RoleFocus';
 import { ActivityList } from '@/features/work/collab/ActivityList';
 import { formatDay, relativeDue } from '@/features/work/format';
 import { ProgressBar } from '@/features/work/projects/ProgressBar';
@@ -70,6 +71,8 @@ export function OverviewPage() {
         <ErrorState error={overview.error} onRetry={() => void overview.refetch()} />
       ) : (
         <>
+          <RoleFocus query={query} />
+          <h2 className="pt-2 text-sm font-semibold">All figures</h2>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
             <StatCard
               label="Active projects"

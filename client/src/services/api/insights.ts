@@ -1,8 +1,10 @@
 import type {
   ActivityDto,
   BottlenecksDto,
+  DependencyMapDto,
   PerformanceTrendsDto,
   ProjectStatusDto,
+  RoleDashboardDto,
   WorkSummaryDto,
   AnalyticsQuery,
   CreateRiskInput,
@@ -30,6 +32,10 @@ export const fetchTrends = (q: { departmentId?: string }) =>
   apiGet<PerformanceTrendsDto>('/analytics/trends', { params: toParams(q) });
 export const fetchBottlenecks = (q: SummaryQuery) =>
   apiGet<BottlenecksDto>('/analytics/bottlenecks', { params: toParams(q) });
+export const fetchRoleDashboard = (q: { from?: string; to?: string }) =>
+  apiGet<RoleDashboardDto>('/analytics/my-dashboard', { params: toParams(q) });
+export const fetchDependencies = (q: { departmentId?: string; projectId?: string }) =>
+  apiGet<DependencyMapDto>('/analytics/dependencies', { params: toParams(q) });
 export const fetchOverview = (q: Partial<AnalyticsQuery>) =>
   apiGet<OverviewDto>('/analytics/overview', { params: toParams(q) });
 export const fetchDashboardActivity = () => apiGet<ActivityDto[]>('/analytics/activity');

@@ -118,3 +118,125 @@ export interface BottlenecksDto {
   recurringTags: { tag: string; tasks: number }[];
   findings: string[];
 }
+
+/* ============================ Role dashboard ============================ */
+
+export const DASHBOARD_PERSONAS = [
+  'executive',
+  'technology',
+  'department',
+  'project',
+  'team',
+  'quality',
+  'individual',
+] as const;
+export type DashboardPersona = (typeof DASHBOARD_PERSONAS)[number];
+
+export const PERSONA_LABELS: Record<DashboardPersona, string> = {
+  executive: 'Organisation view',
+  technology: 'Technology view',
+  department: 'Department view',
+  project: 'Project manager view',
+  team: 'Team lead view',
+  quality: 'Quality view',
+  individual: 'My work',
+};
+
+export interface DashboardKpiDto {
+  label: string;
+  value: string;
+  hint?: string;
+  /** Colour hint only; the figure itself is always shown. */
+  tone?: 'good' | 'warning' | 'bad';
+  link?: string;
+}
+
+export interface DashboardItemDto {
+  text: string;
+  detail?: string;
+  link?: string;
+  tone?: 'warning' | 'bad';
+}
+
+export interface RoleDashboardDto {
+  persona: DashboardPersona;
+  /** One sentence on what this view is for. */
+  focus: string;
+  period: { from: string; to: string };
+  kpis: DashboardKpiDto[];
+  /** What needs this person's attention first, most urgent first. */
+  attention: DashboardItemDto[];
+  /** Named lists shown under the figures (for example "Departments" or "Testing queue"). */
+  lists: { title: string; columns: string[]; rows: { cells: string[]; link?: string }[] }[];
+}
+
+/* ============================ Dependencies & blockers ============================ */
+
+export const dependencyQuerySchema = z.strictObject({
+  departmentId: objectIdSchema.optional(),
+  projectId: objectIdSchema.optional(),
+});
+export type DependencyQuery = z.infer<typeof dependencyQuerySchema>;
+
+export interface TaskBriefDto {
+  id: string;
+  key: string;
+  title: string;
+  status: TaskStatus;
+  dueDate: string | null;
+  assignee: string | null;
+  project: { id: string; key: string; name: string };
+}
+
+/**
+ * - late: the task it waits for is past its own due date
+ * - at_risk: the task it waits for is due after this task is due
+ * - waiting: the task it waits for is still open, on schedule
+ * - ready: everything it waits for is finished
+ */
+export type DependencyState = 'late' | 'at_risk' | 'waiting' | 'ready';
+
+export interface DependencyLinkDto {
+  task: TaskBriefDto;
+  /** Null when the task waited for is in a project the viewer cannot open. */
+  dependsOn: TaskBriefDto | null;
+  state: DependencyState;
+  reason: string;
+  crossProject: boolean;
+}
+
+export interface BlockedTaskDto {
+  task: TaskBriefDto;
+  /** Whole days since it was marked blocked. */
+  days: number;
+  /** Note given when it was marked blocked, and who did it. */
+  note: string | null;
+  by: string | null;
+  /** Open tasks that wait for this one. */
+  holdingUp: number;
+}
+
+export interface ProjectLinkDto {
+  project: { id: string; key: string; name: string; endDate: string | null };
+  dependsOn: { id: string; key: string; name: string; endDate: string | null; status: string };
+  note: string | null;
+  state: 'late' | 'at_risk' | 'ok' | 'done';
+  reason: string;
+}
+
+export interface DependencyMapDto {
+  summary: {
+    openLinks: number;
+    late: number;
+    atRisk: number;
+    crossProject: number;
+    blocked: number;
+    blockedOver3Days: number;
+    projectLinksAtRisk: number;
+  };
+  links: DependencyLinkDto[];
+  blocked: BlockedTaskDto[];
+  /** Open tasks that the most other open tasks wait for. */
+  holdingUpMost: { task: TaskBriefDto; dependents: number }[];
+  projects: ProjectLinkDto[];
+}

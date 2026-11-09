@@ -3,6 +3,8 @@ import type {
   AssignmentPlanDto,
   AvailabilityDto,
   AvailabilityInput,
+  CapacityPlanDto,
+  CapacityPlanQuery,
   BatchPreviewInput,
   CreateWorklogInput,
   JournalDto,
@@ -94,6 +96,8 @@ export const fetchTeamPerformance = (
   period: PerformancePeriod,
   filter: { departmentId?: string; teamId?: string } = {},
 ) => apiGet<TeamPerformanceDto>('/teams/performance', { params: toParams({ period, ...filter }) });
+export const fetchCapacityPlan = (q: Partial<CapacityPlanQuery>) =>
+  apiGet<CapacityPlanDto>('/teams/capacity', { params: toParams(q) });
 export const fetchTeams = () => apiGet<TeamDto[]>('/teams');
 export const createTeam = (input: TeamInput) => apiPost<TeamDto>('/teams', input);
 export const updateTeam = (id: string, input: Partial<TeamInput>) =>

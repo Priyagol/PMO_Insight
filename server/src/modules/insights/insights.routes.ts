@@ -5,7 +5,9 @@ import {
   createRiskSchema,
   escalateRiskSchema,
   hoursQuerySchema,
+  dependencyQuerySchema,
   objectIdSchema,
+  type DependencyQuery,
   projectStatusQuerySchema,
   workSummaryQuerySchema,
   type ProjectStatusQuery,
@@ -24,6 +26,8 @@ import * as risks from '../risks/risk.service';
 import * as analytics from './analytics.service';
 import * as delays from './delay.service';
 import * as digest from './digest.service';
+import { roleDashboard } from './role-dashboard.service';
+import { dependencyMap } from './dependency.service';
 import { projectForecasts } from './forecast.service';
 import * as reports from './report.service';
 
@@ -133,6 +137,28 @@ analyticsRoutes.get('/projects/:id/delays', validate({ params: idParams }), asyn
 analyticsRoutes.get('/hours', validate({ query: hoursQuerySchema.strict() }), async (req, res) => {
   sendOk(res, await analytics.hoursBreakdown(requestContext(req), query(req)));
 });
+
+analyticsRoutes.get(
+  '/dependencies',
+  validate({ query: dependencyQuerySchema }),
+  async (req, res) => {
+    sendOk(res, await dependencyMap(requestContext(req), query<DependencyQuery>(req)));
+  },
+);
+
+/* The Overview focus panel, chosen by the viewer's role. */
+analyticsRoutes.get(
+  '/my-dashboard',
+  validate({
+    query: z.strictObject({ from: z.iso.date().optional(), to: z.iso.date().optional() }),
+  }),
+  async (req, res) => {
+    sendOk(
+      res,
+      await roleDashboard(requestContext(req), query<{ from?: string; to?: string }>(req)),
+    );
+  },
+);
 
 /* Summaries computed from the data (they work without an AI service). */
 analyticsRoutes.get(

@@ -34,8 +34,8 @@ describe('navigation catalogue', () => {
   });
 
   it('covers every module in the navigation structure of the brief', () => {
-    // The brief's 26 modules plus Project Templates (Phase 5B) and Help Center, Search & Filters and Task Workflows (Phase 9), and Project Timeline.
-    expect(ALL_NAV_ITEMS).toHaveLength(31);
+    // The brief's 26 modules plus Project Templates (Phase 5B) and Help Center, Search & Filters and Task Workflows (Phase 9), Project Timeline, and Dependencies & Blockers.
+    expect(ALL_NAV_ITEMS).toHaveLength(32);
     expect(NAV_SECTIONS.map((s) => s.label)).toEqual([
       'Workspace',
       'Management',

@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils';
 import * as t from '@/services/api/tracking';
 import { useAvailability, useTeamWorkload, useTrackMutation } from './hooks';
 import { AvailabilityBadge } from './LeaveDialog';
+import { CapacityPanel } from './CapacityPanel';
 import { PerformancePanel } from './PerformancePanel';
 import { TeamsPanel } from './TeamsPanel';
 
@@ -295,12 +296,16 @@ export function TeamsPage() {
       <Tabs defaultValue="workload">
         <TabsList>
           <TabsTrigger value="workload">Workload</TabsTrigger>
+          <TabsTrigger value="capacity">Capacity plan</TabsTrigger>
           <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="teams">Teams</TabsTrigger>
           <TabsTrigger value="leave">Leave</TabsTrigger>
         </TabsList>
         <TabsContent value="workload" className="mt-4">
           <Workload />
+        </TabsContent>
+        <TabsContent value="capacity" className="mt-4">
+          <CapacityPanel />
         </TabsContent>
         <TabsContent value="performance" className="mt-4">
           <PerformancePanel />

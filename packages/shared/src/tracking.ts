@@ -504,3 +504,47 @@ export interface TeamDto {
   members: UserRef[];
   canEdit: boolean;
 }
+
+/* ============================ Capacity planning ============================ */
+
+export const CAPACITY_GROUPS = ['person', 'team', 'department', 'skill'] as const;
+export type CapacityGroup = (typeof CAPACITY_GROUPS)[number];
+
+export const capacityPlanQuerySchema = z.strictObject({
+  weeks: z.coerce.number().int().min(2).max(26).default(8),
+  groupBy: z.enum(CAPACITY_GROUPS).default('person'),
+  departmentId: objectIdSchema.optional(),
+  teamId: objectIdSchema.optional(),
+});
+export type CapacityPlanQuery = z.infer<typeof capacityPlanQuerySchema>;
+
+export interface CapacityWeekDto {
+  /** Hours available after approved leave (working days only; the current week from today). */
+  capacity: number;
+  /** Remaining estimated work planned into this week (spread over working days up to the due date). */
+  demand: number;
+}
+
+export interface CapacityRowDto {
+  id: string;
+  label: string;
+  sublabel?: string;
+  people: number;
+  weeks: CapacityWeekDto[];
+  /** Open work with no due date (cannot be placed in a week). */
+  unscheduled: number;
+  /** Work already past its due date, counted in the first week. */
+  overdue: number;
+}
+
+export interface CapacityPlanDto {
+  /** Monday of each planned week. */
+  weeks: string[];
+  groupBy: CapacityGroup;
+  rows: CapacityRowDto[];
+  totals: CapacityRowDto;
+  /** Weeks where planned work exceeds available hours, worst first. */
+  shortfalls: { row: string; week: string; gap: number }[];
+  /** How the figures are worked out, in plain words. */
+  assumptions: string[];
+}
