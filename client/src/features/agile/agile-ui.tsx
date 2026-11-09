@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BookOpen, Bug, CheckSquare, Zap, type LucideIcon } from 'lucide-react';
+import { BookOpen, Bug, CheckSquare, Sparkles, Zap, type LucideIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   BUG_SEVERITY_LABELS,
@@ -58,6 +58,7 @@ const TYPE_STYLE: Record<IssueType, { icon: LucideIcon; color: string }> = {
   task: { icon: CheckSquare, color: 'var(--chart-1)' },
   story: { icon: BookOpen, color: 'var(--status-good)' },
   bug: { icon: Bug, color: 'var(--status-critical)' },
+  enhancement: { icon: Sparkles, color: 'var(--status-warning)' },
   epic: { icon: Zap, color: 'var(--violet)' },
 };
 

@@ -23,6 +23,8 @@ import { cn } from '@/lib/utils';
 import * as t from '@/services/api/tracking';
 import { useAvailability, useTeamWorkload, useTrackMutation } from './hooks';
 import { AvailabilityBadge } from './LeaveDialog';
+import { PerformancePanel } from './PerformancePanel';
+import { TeamsPanel } from './TeamsPanel';
 
 const ALL = 'all';
 const STATE: Record<WorkloadRowDto['state'], { label: string; tone: string; bar: string }> = {
@@ -288,15 +290,23 @@ export function TeamsPage() {
     <div className="space-y-5">
       <PageHeader
         title="Teams & Resources"
-        description="Who has capacity, who is overloaded, and who is away."
+        description="Who has capacity, who is delivering on time, and who is away."
       />
       <Tabs defaultValue="workload">
         <TabsList>
           <TabsTrigger value="workload">Workload</TabsTrigger>
+          <TabsTrigger value="performance">Performance</TabsTrigger>
+          <TabsTrigger value="teams">Teams</TabsTrigger>
           <TabsTrigger value="leave">Leave</TabsTrigger>
         </TabsList>
         <TabsContent value="workload" className="mt-4">
           <Workload />
+        </TabsContent>
+        <TabsContent value="performance" className="mt-4">
+          <PerformancePanel />
+        </TabsContent>
+        <TabsContent value="teams" className="mt-4">
+          <TeamsPanel />
         </TabsContent>
         <TabsContent value="leave" className="mt-4">
           <Leave />

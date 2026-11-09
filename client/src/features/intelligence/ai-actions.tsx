@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { AiMinutesResult, AiProjectSummaryOutput, AiResult } from '@arihant/shared';
+import { useCan } from '@/hooks/use-permission';
 import * as ai from '@/services/api/intelligence';
 import { AiButton, AiResultDialog, BulletList, useAiAvailable, useAiCall } from './ai-kit';
 
@@ -33,11 +34,16 @@ export function ExplainHealthButton({ projectId }: { projectId: string }) {
   );
 }
 
+/**
+ * Status summary for a project. With AI configured it is written by AI; otherwise the server
+ * builds it from the project data with fixed rules, so the button is always useful.
+ */
 export function ProjectSummaryButton({ projectId }: { projectId: string }) {
+  const canUse = useCan('ai:use');
   const available = useAiAvailable();
   const [result, setResult] = useState<AiResult<AiProjectSummaryOutput> | null>(null);
   const call = useAiCall(() => ai.aiProjectSummary(projectId));
-  if (!available) return null;
+  if (!canUse) return null;
   return (
     <>
       <AiButton
@@ -45,7 +51,7 @@ export function ProjectSummaryButton({ projectId }: { projectId: string }) {
         busy={call.isPending}
         onClick={() => call.mutate(undefined, { onSuccess: setResult })}
       >
-        AI summary
+        {available ? 'AI summary' : 'Status summary'}
       </AiButton>
       {result ? (
         <AiResultDialog

@@ -61,6 +61,8 @@ export interface DepartmentDto {
   head: UserRef | null;
   parent: DepartmentRef | null;
   memberCount: number;
+  /** Set when the department is archived (listed only with ?archived=true). */
+  archivedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -225,21 +225,64 @@ async function withApprovalRights(ids: Types.ObjectId[]): Promise<Types.ObjectId
   return users.map((u) => u._id);
 }
 
+/** Active directors with approval rights (last resort for a missing department head). */
+async function directors(): Promise<Types.ObjectId[]> {
+  const role = await Role.findOne({ key: 'director' }).select('_id').lean();
+  if (!role) return [];
+  return (
+    await User.find({ roleIds: role._id, status: 'active' }).select('_id').limit(50).lean()
+  ).map((u) => u._id);
+}
+
+/** Head of a department, if it exists and is active with approval rights. */
+async function headOf(departmentId: Types.ObjectId | null | undefined) {
+  if (!departmentId) return null;
+  const d = await Department.findOne({ _id: departmentId, archived: false })
+    .select('headId name')
+    .lean();
+  const [head] = d?.headId ? await withApprovalRights([d.headId]) : [];
+  return head ? { id: head, department: d!.name } : null;
+}
+
+/**
+ * A project's department head; when the project has none (no department, no head, or the head
+ * is inactive), the head of the project manager's department. As a last resort (nobody else in
+ * the whole workflow could approve), the directors. The fallback is noted on the stage.
+ */
+async function departmentHeadFor(
+  project: IProject,
+  lastResort: boolean,
+): Promise<{ ids: Types.ObjectId[]; note?: string }> {
+  const own = await headOf(project.departmentId);
+  if (own) return { ids: [own.id] };
+  const pm = await User.findById(project.managerId).select('departmentId').lean();
+  const pmHead = await headOf(pm?.departmentId);
+  if (pmHead)
+    return {
+      ids: [pmHead.id],
+      note: `The project has no department head: sent to the head of ${pmHead.department} (the project manager's department)`,
+    };
+  if (!lastResort) return { ids: [] };
+  return {
+    ids: await directors(),
+    note: 'The project has no department head and nobody else could approve: sent to the directors',
+  };
+}
+
 async function resolveApprovers(
   stage: IApprovalStage,
   project: IProject,
   requesterId: Types.ObjectId,
-): Promise<Types.ObjectId[]> {
+  lastResort = false,
+): Promise<{ ids: Types.ObjectId[]; note?: string }> {
   let ids: Types.ObjectId[] = [];
+  let note: string | undefined;
   switch (stage.approverType) {
     case 'project_manager':
       ids = [project.managerId];
       break;
     case 'department_head': {
-      const d = project.departmentId
-        ? await Department.findById(project.departmentId).select('headId').lean()
-        : null;
-      ids = d?.headId ? [d.headId] : [];
+      ({ ids, note } = await departmentHeadFor(project, lastResort));
       break;
     }
     case 'reporting_manager': {
@@ -261,7 +304,10 @@ async function resolveApprovers(
       break;
   }
   // Nobody approves their own request.
-  return (await withApprovalRights(ids)).filter((id) => !id.equals(requesterId));
+  return {
+    ids: (await withApprovalRights(ids)).filter((id) => !id.equals(requesterId)),
+    note,
+  };
 }
 
 /**
@@ -274,6 +320,7 @@ async function advance(
   project: IProject,
   from: number,
   now: Date,
+  lastResort = false,
 ): Promise<number> {
   for (let i = from; i < doc.stages.length; i += 1) {
     const stage = doc.stages[i]!;
@@ -282,7 +329,12 @@ async function advance(
       stage.note = 'Not needed: an earlier stage approved';
       continue;
     }
-    const approvers = await resolveApprovers(stage, project, doc.requestedBy);
+    const { ids: approvers, note } = await resolveApprovers(
+      stage,
+      project,
+      doc.requestedBy,
+      lastResort,
+    );
     if (!approvers.length) {
       stage.status = 'skipped';
       stage.note = 'No eligible approver for this stage';
@@ -290,6 +342,7 @@ async function advance(
     }
     stage.status = 'pending';
     stage.approverIds = approvers;
+    if (note) stage.note = note;
     stage.startedAt = now;
     stage.dueAt = new Date(now.getTime() + stage.slaHours * 3600_000);
     return i;
@@ -534,7 +587,12 @@ async function startApproval(
     })),
     requestedBy: auth.userObjectId,
   };
-  const current = await advance(doc, project, 0, now);
+  let current = await advance(doc, project, 0, now);
+  if (current < 0) {
+    // Nobody could approve: try again letting a department head stage reach the directors.
+    for (const st of doc.stages) Object.assign(st, { status: 'waiting', note: null });
+    current = await advance(doc, project, 0, now, true);
+  }
   if (current < 0)
     throw new UnprocessableError(
       'Nobody is eligible to approve this request. Ask an administrator to review the approval workflow.',

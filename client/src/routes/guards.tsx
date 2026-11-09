@@ -17,9 +17,12 @@ function FullScreenLoader() {
 /** Protected area: waits for session restore, then requires a signed-in user. */
 export function RequireAuth({ children }: { children: ReactNode }) {
   const status = useAppSelector((s) => s.session.status);
+  const signedOut = useAppSelector((s) => s.session.signedOut);
   const location = useLocation();
   if (status === 'restoring') return <FullScreenLoader />;
   if (status === 'anonymous') {
+    // After a deliberate sign-out, never carry the old page over to the next person.
+    if (signedOut) return <Navigate to="/login" replace />;
     const next = `${location.pathname}${location.search}`;
     return (
       <Navigate to={next === '/' ? '/login' : `/login?next=${encodeURIComponent(next)}`} replace />

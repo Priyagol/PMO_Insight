@@ -245,10 +245,13 @@ describe('departments', () => {
 });
 
 describe('roles', () => {
-  it('lists the nine system roles with Super Admin locked', async () => {
+  it('lists the eleven system roles with Super Admin locked', async () => {
     const admin = await loginAs(h.app, 'super_admin');
     const res = await api().get('/api/v1/roles').set(admin.auth);
-    expect(res.body.data).toHaveLength(9);
+    expect(res.body.data).toHaveLength(11);
+    expect(res.body.data.map((r: { key: string }) => r.key)).toEqual(
+      expect.arrayContaining(['managing_director', 'cto']),
+    );
     expect(res.body.data[0]).toMatchObject({ key: 'super_admin', locked: true, userCount: 1 });
     const locked = await api()
       .patch(`/api/v1/roles/${res.body.data[0].id}`)

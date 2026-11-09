@@ -18,6 +18,11 @@ import {
   timesheetQuerySchema,
   timesheetRejectSchema,
   timesheetWeekSchema,
+  teamPerformanceQuerySchema,
+  teamSchema,
+  updateTeamSchema,
+  type TeamInput,
+  type TeamPerformanceQuery,
   updateWorklogSchema,
   worklogQuerySchema,
   type AssignmentConfig,
@@ -28,6 +33,8 @@ import { authenticate, authorize } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { recordAudit } from '../audit/audit.service';
 import * as assignment from '../assignment/assignment.service';
+import { teamPerformance } from './performance.service';
+import * as teams from './team.service';
 import { getAssignmentConfig } from '../assignment/workload.service';
 import { Setting } from '../settings/settings.model';
 import * as people from './people.service';
@@ -201,6 +208,32 @@ teamRoutes.get(
     );
   },
 );
+
+teamRoutes.get(
+  '/performance',
+  validate({ query: teamPerformanceQuerySchema }),
+  async (req, res) => {
+    sendOk(res, await teamPerformance(requestContext(req), query<TeamPerformanceQuery>(req)));
+  },
+);
+
+teamRoutes.get('/', async (req, res) => {
+  sendOk(res, await teams.listTeams(requestContext(req)));
+});
+teamRoutes.post('/', validate({ body: teamSchema }), async (req, res) => {
+  sendCreated(res, await teams.createTeam(requestContext(req), body<TeamInput>(req)));
+});
+teamRoutes.patch(
+  '/:id',
+  validate({ params: idParams, body: updateTeamSchema }),
+  async (req, res) => {
+    sendOk(res, await teams.updateTeam(requestContext(req), id(req), body<TeamInput>(req)));
+  },
+);
+teamRoutes.delete('/:id', validate({ params: idParams }), async (req, res) => {
+  await teams.archiveTeam(requestContext(req), id(req));
+  sendNoContent(res);
+});
 
 export const passportRoutes = Router();
 passportRoutes.use(authenticate);

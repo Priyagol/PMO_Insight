@@ -429,3 +429,78 @@ export interface WorkPassportDto {
   }[];
   hoursByCategory: { category: WorkCategory; hours: number }[];
 }
+
+/* ============================ Team performance ============================ */
+
+export const PERFORMANCE_PERIODS = ['30d', '90d', 'quarter', 'year'] as const;
+export type PerformancePeriod = (typeof PERFORMANCE_PERIODS)[number];
+
+export const teamPerformanceQuerySchema = z.strictObject({
+  period: z.enum(PERFORMANCE_PERIODS).default('30d'),
+  departmentId: objectIdSchema.optional(),
+  teamId: objectIdSchema.optional(),
+});
+export type TeamPerformanceQuery = z.infer<typeof teamPerformanceQuerySchema>;
+
+/**
+ * Delivery facts per person for a period. These are counts taken from tasks, status history
+ * and work logs — not a score. Rework is attributed to the task's current assignee.
+ */
+export interface PerformanceRowDto {
+  user: UserRef & { department?: string | null };
+  /** All tasks currently assigned (not cancelled). */
+  assigned: number;
+  /** Assigned and not finished yet. */
+  pending: number;
+  /** Pending with a due date before today. */
+  overdue: number;
+  /** Finished within the period. */
+  completed: number;
+  /** Of the completed tasks that had a due date, how many finished on or before it. */
+  completedWithDueDate: number;
+  completedOnTime: number;
+  /** completedOnTime / completedWithDueDate as a percentage, or null without due dates. */
+  onTimeRate: number | null;
+  /** Times a task was sent back from review, testing or done to work within the period. */
+  reworked: number;
+  /** Of those, sent back from testing (QA rejections). */
+  qaRejections: number;
+  /** Estimated vs logged hours on the tasks completed in the period. */
+  estimatedHours: number;
+  actualHours: number;
+  /** Hours logged in the period on any work. */
+  loggedHours: number;
+}
+
+export type PerformanceCounts = Omit<PerformanceRowDto, 'user'>;
+
+export interface TeamPerformanceDto {
+  period: { key: PerformancePeriod; from: string; to: string };
+  rows: PerformanceRowDto[];
+  totals: PerformanceCounts;
+  /** The same counts added up per named team, over the members visible to the viewer. */
+  teams: { team: { id: string; name: string }; members: number; totals: PerformanceCounts }[];
+}
+
+/* ============================ Named teams ============================ */
+
+const teamFields = {
+  name: z.string().trim().min(2, 'Name the team').max(80),
+  description: z.string().trim().max(500).optional(),
+  departmentId: objectIdSchema.nullable().optional(),
+  leadId: objectIdSchema.nullable().optional(),
+  memberIds: z.array(objectIdSchema).max(100, 'A team can have up to 100 members').default([]),
+};
+export const teamSchema = z.strictObject(teamFields);
+export type TeamInput = z.input<typeof teamSchema>;
+export const updateTeamSchema = z.strictObject(withoutDefaults(teamFields)).partial();
+
+export interface TeamDto {
+  id: string;
+  name: string;
+  description: string | null;
+  department: { id: string; name: string } | null;
+  lead: UserRef | null;
+  members: UserRef[];
+  canEdit: boolean;
+}

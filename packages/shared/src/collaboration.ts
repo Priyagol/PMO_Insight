@@ -15,6 +15,7 @@ export const NOTIFICATION_TYPES = [
   'task_status',
   'task_comment',
   'task_due',
+  'task_escalated',
   'timesheet_submitted',
   'timesheet_decided',
   'leave_requested',
@@ -42,6 +43,11 @@ export const NOTIFICATION_CATALOGUE: Record<
   task_status: { label: 'A task I watch changes status', group: 'Tasks', email: false },
   task_comment: { label: 'New comment on a task I watch', group: 'Tasks', email: false },
   task_due: { label: 'My task is due tomorrow or overdue', group: 'Tasks', email: false },
+  task_escalated: {
+    label: 'A task in my team or project is overdue for several days',
+    group: 'Tasks',
+    email: true,
+  },
   timesheet_submitted: {
     label: 'A timesheet awaits my approval',
     group: 'Time & leave',

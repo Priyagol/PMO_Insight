@@ -16,7 +16,9 @@ import {
   type AiMinutesResult,
   type AiResult,
   type AiSettings,
+  type AiProjectSummaryOutput,
   type AiStatusDto,
+  type TaskStatus,
 } from '@arihant/shared';
 import {
   ForbiddenError,
@@ -73,6 +75,73 @@ const SETTINGS_KEY = 'ai';
 const DEFAULTS: AiSettings = { enabled: false, dailyLimitPerUser: 50 };
 export const DISCLAIMER =
   'AI-generated proposal. Review it before applying; nothing has been changed.';
+
+/** True when AI calls can be made: switched on and an API key is configured. */
+export async function aiReady(): Promise<boolean> {
+  return (await settings()).enabled && aiProvider().configured();
+}
+
+/** Label used instead of a model name when a result was computed by rules, not by AI. */
+export const RULES_MODEL = 'built-in rules (no AI service)';
+export const RULES_DISCLAIMER =
+  'Built from the project data without an AI service. Every point can be checked on the project pages; nothing has been changed.';
+
+type SummaryTask = { key: string; title: string; status: TaskStatus; dueDate?: string | null };
+
+/**
+ * Status summary built from the same facts the AI prompt receives, for servers without an
+ * AI key (or with AI switched off). Wording is fixed; numbers come straight from the data.
+ */
+export function ruleBasedSummary(d: {
+  project: { key: string; name: string; endDate?: string | null };
+  health:
+    { score: number; band: string; progress: number; warnings: { message: string }[] } | undefined;
+  tasks: SummaryTask[];
+  open: SummaryTask[];
+  overdue: SummaryTask[];
+  risks: { key: string; title: string; severity: string }[];
+  milestones: { name: string; dueDate: string; status: string }[];
+  today: string;
+}): AiProjectSummaryOutput {
+  const keys = (list: { key: string }[], max = 5) =>
+    list
+      .slice(0, max)
+      .map((t) => t.key)
+      .join(', ') + (list.length > max ? ' and more' : '');
+  const blocked = d.open.filter((t) => t.status === 'blocked');
+  const done = d.tasks.filter((t) => t.status === 'done').length;
+  const band = d.health ? d.health.band.replace('_', ' ') : 'not scored';
+  const summary = [
+    `${d.project.key} – ${d.project.name} is ${band}${d.health ? ` with a health score of ${d.health.score}/100 and ${d.health.progress}% progress` : ''}.`,
+    `${d.open.length} open task(s), ${d.overdue.length} past due and ${blocked.length} blocked; ${done} done so far.`,
+    d.project.endDate ? `Planned end date: ${d.project.endDate}.` : 'No end date is set.',
+  ].join(' ');
+  const upcoming = d.milestones
+    .filter((m) => m.status !== 'completed' && m.dueDate >= d.today)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const highlights: string[] = [];
+  if (done) highlights.push(`${done} task(s) completed.`);
+  const reached = d.milestones.filter((m) => m.status === 'completed');
+  if (reached.length)
+    highlights.push(`Milestones reached: ${reached.map((m) => m.name).join(', ')}.`);
+  if (!d.overdue.length && d.open.length) highlights.push('No open task is past its due date.');
+  const concerns = [
+    ...(d.health?.warnings.map((w) => w.message) ?? []),
+    ...(d.overdue.length ? [`Past due: ${keys(d.overdue)}.`] : []),
+    ...(blocked.length ? [`Blocked: ${keys(blocked)}.`] : []),
+    ...d.risks
+      .filter((r) => r.severity === 'critical' || r.severity === 'high')
+      .map((r) => `${r.key} (${r.severity}): ${r.title}`),
+  ].slice(0, 5);
+  const nextSteps: string[] = [];
+  if (d.overdue.length) nextSteps.push(`Agree new dates or owners for ${keys(d.overdue)}.`);
+  if (blocked.length) nextSteps.push(`Remove the blockers on ${keys(blocked)}.`);
+  const risky = d.risks.filter((r) => r.severity === 'critical');
+  if (risky.length) nextSteps.push(`Review mitigation for ${keys(risky)}.`);
+  if (upcoming[0])
+    nextSteps.push(`Prepare for milestone “${upcoming[0].name}” due ${upcoming[0].dueDate}.`);
+  return { summary, highlights, concerns, nextSteps: nextSteps.slice(0, 5) };
+}
 
 async function settings(): Promise<AiSettings> {
   const doc = await Setting.findOne({ key: SETTINGS_KEY }).lean();
@@ -279,6 +348,25 @@ export async function projectSummary(
         'none',
     ),
   ].join('\n\n');
+  if (!(await aiReady())) {
+    if (!can(auth, 'ai:use'))
+      throw new ForbiddenError('You do not have access to the AI assistant');
+    return {
+      feature: 'project_summary',
+      model: RULES_MODEL,
+      proposal: ruleBasedSummary({
+        project,
+        health,
+        open,
+        overdue,
+        risks,
+        milestones,
+        tasks,
+        today,
+      }),
+      disclaimer: RULES_DISCLAIMER,
+    };
+  }
   const res = await run(rc, 'project_summary', project.key, {
     schema: aiProjectSummaryOutput,
     system: `${BASE_SYSTEM}\nYou write concise status summaries for managers.`,

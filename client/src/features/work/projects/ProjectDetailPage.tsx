@@ -13,7 +13,7 @@ import {
   Timer,
 } from 'lucide-react';
 import { lazy, Suspense, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   PROJECT_MEMBER_ROLES,
   STATUS_LABELS,
@@ -85,6 +85,9 @@ import { ProgressBar } from './ProgressBar';
 // Charts (Recharts) load only when a report tab is opened.
 const AgileReportsPanel = lazy(() =>
   import('@/features/agile/AgileReportsPanel').then((m) => ({ default: m.AgileReportsPanel })),
+);
+const DelayAnalysis = lazy(() =>
+  import('@/features/insights/DelayAnalysis').then((m) => ({ default: m.DelayAnalysis })),
 );
 const ProjectAnalyticsTab = lazy(() =>
   import('@/features/insights/ProjectAnalyticsTab').then((m) => ({
@@ -365,6 +368,11 @@ function History({ projectId }: { projectId: string }) {
               </li>
             ))}
           </ul>
+          {v.reason ? (
+            <p className="mt-1 text-xs">
+              <span className="font-medium">Reason:</span> {v.reason}
+            </p>
+          ) : null}
         </li>
       ))}
     </ol>
@@ -457,6 +465,8 @@ function DuplicateDialog({
 
 export function ProjectDetailPage() {
   const { projectId = '' } = useParams();
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
   const project = useProject(projectId);
   const activity = useProjectActivity(projectId);
   const canDuplicate = useCan('project:create');
@@ -552,7 +562,7 @@ export function ProjectDetailPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="overview">
+      <Tabs defaultValue={tabParam ?? 'overview'}>
         <TabsList className="flex-wrap">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="tasks">Tasks ({p.progress.totalTasks})</TabsTrigger>
@@ -563,6 +573,7 @@ export function ProjectDetailPage() {
           <TabsTrigger value="team">Team</TabsTrigger>
           {canReadRisks ? <TabsTrigger value="risks">Risks</TabsTrigger> : null}
           {canAnalytics ? <TabsTrigger value="analytics">Analytics</TabsTrigger> : null}
+          {canAnalytics ? <TabsTrigger value="delays">Delays</TabsTrigger> : null}
           {canReadDocs ? <TabsTrigger value="documents">Documents</TabsTrigger> : null}
           {canReadReleases ? <TabsTrigger value="releases">Releases</TabsTrigger> : null}
           <TabsTrigger value="changes">Change requests</TabsTrigger>
@@ -595,6 +606,13 @@ export function ProjectDetailPage() {
           <TabsContent value="analytics" className="mt-4">
             <Suspense fallback={<Skeleton className="h-96 w-full" />}>
               <ProjectAnalyticsTab projectId={p.id} />
+            </Suspense>
+          </TabsContent>
+        ) : null}
+        {canAnalytics ? (
+          <TabsContent value="delays" className="mt-4">
+            <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+              <DelayAnalysis projectId={p.id} />
             </Suspense>
           </TabsContent>
         ) : null}

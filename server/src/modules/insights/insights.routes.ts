@@ -6,6 +6,10 @@ import {
   escalateRiskSchema,
   hoursQuerySchema,
   objectIdSchema,
+  projectStatusQuerySchema,
+  workSummaryQuerySchema,
+  type ProjectStatusQuery,
+  type WorkSummaryQuery,
   riskQuerySchema,
   snapshotQuerySchema,
   updateRiskSchema,
@@ -18,6 +22,8 @@ import { validate } from '../../middleware/validate';
 import { recordAudit } from '../audit/audit.service';
 import * as risks from '../risks/risk.service';
 import * as analytics from './analytics.service';
+import * as delays from './delay.service';
+import * as digest from './digest.service';
 import { projectForecasts } from './forecast.service';
 import * as reports from './report.service';
 
@@ -108,9 +114,58 @@ analyticsRoutes.get(
     );
   },
 );
+analyticsRoutes.get(
+  '/timeline',
+  validate({ query: z.strictObject({ departmentId: objectIdSchema.optional() }) }),
+  async (req, res) => {
+    sendOk(
+      res,
+      await delays.portfolioTimeline(
+        requestContext(req),
+        req.valid!.query as Partial<AnalyticsQuery>,
+      ),
+    );
+  },
+);
+analyticsRoutes.get('/projects/:id/delays', validate({ params: idParams }), async (req, res) => {
+  sendOk(res, await delays.projectDelays(requestContext(req), id(req)));
+});
 analyticsRoutes.get('/hours', validate({ query: hoursQuerySchema.strict() }), async (req, res) => {
   sendOk(res, await analytics.hoursBreakdown(requestContext(req), query(req)));
 });
+
+/* Summaries computed from the data (they work without an AI service). */
+analyticsRoutes.get(
+  '/work-summary',
+  validate({ query: workSummaryQuerySchema }),
+  async (req, res) => {
+    sendOk(res, await digest.workSummary(requestContext(req), query<WorkSummaryQuery>(req)));
+  },
+);
+analyticsRoutes.get(
+  '/project-status',
+  validate({ query: projectStatusQuerySchema }),
+  async (req, res) => {
+    sendOk(res, await digest.projectStatus(requestContext(req), query<ProjectStatusQuery>(req)));
+  },
+);
+analyticsRoutes.get(
+  '/trends',
+  validate({ query: z.strictObject({ departmentId: objectIdSchema.optional() }) }),
+  async (req, res) => {
+    sendOk(
+      res,
+      await digest.performanceTrends(requestContext(req), query<{ departmentId?: string }>(req)),
+    );
+  },
+);
+analyticsRoutes.get(
+  '/bottlenecks',
+  validate({ query: projectStatusQuerySchema }),
+  async (req, res) => {
+    sendOk(res, await digest.bottlenecks(requestContext(req), query<ProjectStatusQuery>(req)));
+  },
+);
 
 /* ============================ Reports & exports ============================ */
 

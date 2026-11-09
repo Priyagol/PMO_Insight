@@ -1,10 +1,11 @@
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { routes } from '@/routes/routes';
 import { ApiClientError } from '@/services/api/client';
 import { renderRoutes } from '@/test/render';
-import { testUser } from '@/test/fixtures';
+import { authenticatedStore, testUser } from '@/test/fixtures';
+import { sessionEnded } from '@/store/session-slice';
 import { safeNext } from '@/lib/redirect';
 
 vi.mock('@/services/api/auth', () => ({
@@ -25,6 +26,26 @@ describe('route guards', () => {
     const { router } = renderRoutes(routes, { path: '/admin/employees' });
     expect(router.state.location.pathname).toBe('/login');
     expect(router.state.location.search).toBe('?next=%2Fadmin%2Femployees');
+  });
+
+  it('after signing out, the sign-in page does not carry the old page over', async () => {
+    const store = authenticatedStore({ 'dashboard:view': 'own' });
+    const { router } = renderRoutes(routes, { path: '/my-workspace', store });
+    act(() => {
+      store.dispatch(sessionEnded({ signedOut: true }));
+    });
+    await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
+    expect(router.state.location.search).toBe('');
+  });
+
+  it('an expired session still remembers the page for the same person', async () => {
+    const store = authenticatedStore({ 'dashboard:view': 'own' });
+    const { router } = renderRoutes(routes, { path: '/my-workspace', store });
+    act(() => {
+      store.dispatch(sessionEnded());
+    });
+    await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
+    expect(router.state.location.search).toBe('?next=%2Fmy-workspace');
   });
 
   it('only accepts same-app relative redirect targets', () => {

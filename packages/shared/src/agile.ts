@@ -8,12 +8,13 @@ import type { UserRef } from './dto';
  * WIP limits, sprints and sprint / flow / defect reports.
  * ========================================================================= */
 
-export const ISSUE_TYPES = ['task', 'story', 'bug', 'epic'] as const;
+export const ISSUE_TYPES = ['task', 'story', 'bug', 'enhancement', 'epic'] as const;
 export type IssueType = (typeof ISSUE_TYPES)[number];
 export const ISSUE_TYPE_LABELS: Record<IssueType, string> = {
   task: 'Task',
   story: 'Story',
   bug: 'Bug',
+  enhancement: 'Enhancement',
   epic: 'Epic',
 };
 

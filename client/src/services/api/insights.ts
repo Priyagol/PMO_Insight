@@ -1,20 +1,35 @@
 import type {
   ActivityDto,
+  BottlenecksDto,
+  PerformanceTrendsDto,
+  ProjectStatusDto,
+  WorkSummaryDto,
   AnalyticsQuery,
   CreateRiskInput,
   HoursRowDto,
   ManagementSnapshotDto,
   OverviewDto,
+  ProjectDelayDto,
   ProjectAnalyticsDto,
   ProjectHealthDto,
   RiskDto,
   RiskHeatmapDto,
   RiskQuery,
+  TimelineProjectDto,
   UpdateRiskInput,
 } from '@arihant/shared';
 import { api, apiDelete, apiGet, apiGetPage, apiPatch, apiPost } from './client';
 import { toParams } from './work';
 
+type SummaryQuery = { from?: string; to?: string; departmentId?: string };
+export const fetchWorkSummary = (q: SummaryQuery) =>
+  apiGet<WorkSummaryDto>('/analytics/work-summary', { params: toParams(q) });
+export const fetchProjectStatus = (q: SummaryQuery) =>
+  apiGet<ProjectStatusDto>('/analytics/project-status', { params: toParams(q) });
+export const fetchTrends = (q: { departmentId?: string }) =>
+  apiGet<PerformanceTrendsDto>('/analytics/trends', { params: toParams(q) });
+export const fetchBottlenecks = (q: SummaryQuery) =>
+  apiGet<BottlenecksDto>('/analytics/bottlenecks', { params: toParams(q) });
 export const fetchOverview = (q: Partial<AnalyticsQuery>) =>
   apiGet<OverviewDto>('/analytics/overview', { params: toParams(q) });
 export const fetchDashboardActivity = () => apiGet<ActivityDto[]>('/analytics/activity');
@@ -22,6 +37,10 @@ export const fetchHealth = (q: Partial<AnalyticsQuery>) =>
   apiGet<ProjectHealthDto[]>('/analytics/health', { params: toParams(q) });
 export const fetchProjectAnalytics = (id: string) =>
   apiGet<ProjectAnalyticsDto>(`/analytics/projects/${id}`);
+export const fetchTimeline = (q: { departmentId?: string } = {}) =>
+  apiGet<TimelineProjectDto[]>('/analytics/timeline', { params: toParams(q) });
+export const fetchProjectDelays = (id: string) =>
+  apiGet<ProjectDelayDto>(`/analytics/projects/${id}/delays`);
 export const fetchHours = (q: Partial<AnalyticsQuery> & { groupBy: string }) =>
   apiGet<HoursRowDto[]>('/analytics/hours', { params: toParams(q) });
 export const fetchSnapshot = (q: Partial<AnalyticsQuery>) =>

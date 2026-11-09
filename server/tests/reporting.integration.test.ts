@@ -91,6 +91,13 @@ describe('Scheduled report e-mails', () => {
     expect(
       nextRun({ frequency: 'monthly', dayOfWeek: 1, dayOfMonth: 1, hour: 9 }, now).toISOString(),
     ).toBe('2026-12-01T03:30:00.000Z');
+    // Quarterly: day 1 of the next financial quarter (January), or July if the year starts in January.
+    const q = { frequency: 'quarterly' as const, dayOfWeek: 1, dayOfMonth: 1, hour: 9 };
+    expect(nextRun(q, now).toISOString()).toBe('2027-01-01T03:30:00.000Z');
+    expect(nextRun({ ...q, dayOfMonth: 5 }, new Date('2026-10-02T04:30:00Z')).toISOString()).toBe(
+      '2026-10-05T03:30:00.000Z',
+    );
+    expect(nextRun(q, now, 2).toISOString()).toBe('2027-02-01T03:30:00.000Z');
   });
 
   it('e-mails a filter export to each recipient with their own access, and skips people without it', async () => {

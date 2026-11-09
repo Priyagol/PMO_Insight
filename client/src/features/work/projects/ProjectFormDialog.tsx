@@ -68,6 +68,7 @@ const formSchema = z
     budget: optionalNumber,
     objectives: z.array(z.object({ text: z.string().trim().max(300) })),
     autoAssign: z.boolean(),
+    dateChangeReason: z.string(),
   })
   .refine((v) => !v.startDate || !v.endDate || v.startDate <= v.endDate, {
     message: 'End date must be on or after the start date',
@@ -94,6 +95,7 @@ function defaults(project: ProjectDto | undefined, me: UserRef | null): FormValu
     budget: project?.budget?.amount ?? Number.NaN,
     objectives: (project?.objectives ?? []).map((text) => ({ text })),
     autoAssign: project?.autoAssign ?? false,
+    dateChangeReason: '',
   };
 }
 
@@ -158,6 +160,10 @@ export function ProjectFormDialog({
       form.setValue('estimatedHours', t.estimatedHours);
   }, [template.data, project, form]);
 
+  // Moving the end date later is a slip: the API asks for a reason, kept in the delay history.
+  const slipsLater = (end: string) => Boolean(project?.endDate && end && end > project.endDate);
+  const watchedEnd = form.watch('endDate');
+
   const save = useWorkMutation(
     (v: Parsed) => {
       const common = {
@@ -177,7 +183,10 @@ export function ProjectFormDialog({
         autoAssign: v.autoAssign,
       };
       return project
-        ? work.updateProject(project.id, common)
+        ? work.updateProject(project.id, {
+            ...common,
+            ...(slipsLater(v.endDate) ? { dateChangeReason: v.dateChangeReason.trim() } : {}),
+          })
         : work.createProject({
             ...common,
             key: v.key.toUpperCase(),
@@ -189,6 +198,10 @@ export function ProjectFormDialog({
   );
 
   const onSubmit = form.handleSubmit(async (v) => {
+    if (slipsLater(v.endDate) && v.dateChangeReason.trim().length < 3) {
+      form.setError('dateChangeReason', { message: 'Say why the end date is moving later' });
+      return;
+    }
     const saved = await save.mutateAsync(v);
     onOpenChange(false);
     if (!project) navigate(`/projects/${saved.id}`);
@@ -362,6 +375,17 @@ export function ProjectFormDialog({
             <FormField label="End date" error={errors.endDate?.message}>
               <Input type="date" {...form.register('endDate')} />
             </FormField>
+            {slipsLater(watchedEnd) ? (
+              <FormField
+                className="sm:col-span-full"
+                label="Why is the end date moving later?"
+                required
+                hint="Shown in the project's delay history, e.g. Client added two reports."
+                error={errors.dateChangeReason?.message}
+              >
+                <Textarea rows={2} maxLength={500} {...form.register('dateChangeReason')} />
+              </FormField>
+            ) : null}
             <FormField label="Estimated hours" error={errors.estimatedHours?.message}>
               <Input
                 type="number"

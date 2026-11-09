@@ -22,5 +22,5 @@ export function testUser(overrides: Partial<UserDto> = {}): UserDto {
 }
 
 export function authenticatedStore(permissions: PermissionMap, user: UserDto = testUser()) {
-  return makeStore({ session: { status: 'authenticated', user, permissions } });
+  return makeStore({ session: { status: 'authenticated', user, permissions, signedOut: false } });
 }

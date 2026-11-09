@@ -21,6 +21,7 @@ import {
   WorkloadChart,
 } from './charts';
 import { useHours, useOverview, useSnapshot } from './hooks';
+import { SummariesTab } from './SummariesTab';
 
 const GROUPS = [
   { value: 'project', label: 'By project' },
@@ -57,6 +58,7 @@ export function AnalyticsPage() {
         <TabsList>
           <TabsTrigger value="overview">Delivery</TabsTrigger>
           <TabsTrigger value="hours">Hours</TabsTrigger>
+          <TabsTrigger value="summaries">Summaries</TabsTrigger>
           <TabsTrigger value="snapshot">Management snapshot</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="mt-4">
@@ -64,6 +66,9 @@ export function AnalyticsPage() {
         </TabsContent>
         <TabsContent value="hours" className="mt-4">
           <HoursTab query={query} />
+        </TabsContent>
+        <TabsContent value="summaries" className="mt-4">
+          <SummariesTab query={query} />
         </TabsContent>
         <TabsContent value="snapshot" className="mt-4">
           <SnapshotTab query={query} />

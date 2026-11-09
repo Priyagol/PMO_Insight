@@ -20,7 +20,7 @@ export function useAuthActions() {
 
   const end = useCallback(() => {
     queryClient.clear();
-    dispatch(sessionEnded());
+    dispatch(sessionEnded({ signedOut: true }));
     navigate('/login', { replace: true });
   }, [dispatch, navigate, queryClient]);
 

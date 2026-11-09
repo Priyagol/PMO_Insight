@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Building2, MoreHorizontal, Pencil, Plus, Archive } from 'lucide-react';
+import { Building2, MoreHorizontal, Pencil, Plus, Archive, ArchiveRestore } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -37,7 +37,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { useCan } from '@/hooks/use-permission';
 import * as org from '@/services/api/org';
-import { useDepartments, useOrgMutation } from '../hooks';
+import { useArchivedDepartments, useDepartments, useOrgMutation } from '../hooks';
 import { UserPicker } from '../components/UserPicker';
 
 const NONE = '__none__';
@@ -181,6 +181,12 @@ export function DepartmentsPage() {
     success: 'Department archived',
   });
 
+  const [showArchived, setShowArchived] = useState(false);
+  const archived = useArchivedDepartments(canManage && showArchived);
+  const restore = useOrgMutation((id: string) => org.restoreDepartment(id), {
+    success: (d) => `${d.name} restored`,
+  });
+
   const rows = useMemo(() => {
     const needle = q.toLowerCase();
     return (data ?? []).filter(
@@ -318,6 +324,48 @@ export function DepartmentsPage() {
           await archive.mutateAsync(archiving!.id);
         }}
       />
+      {canManage ? (
+        <section className="space-y-2" aria-label="Archived departments">
+          <Button variant="outline" size="sm" onClick={() => setShowArchived((v) => !v)}>
+            <Archive /> {showArchived ? 'Hide archived departments' : 'Show archived departments'}
+          </Button>
+          {showArchived ? (
+            archived.isLoading ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : archived.data?.length ? (
+              <ul className="divide-y rounded-lg border bg-card">
+                {archived.data.map((d) => (
+                  <li
+                    key={d.id}
+                    className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
+                  >
+                    <span>
+                      <span className="font-medium">{d.name}</span>{' '}
+                      <span className="font-mono text-xs text-muted-foreground">{d.code}</span>
+                      {d.archivedAt ? (
+                        <span className="text-xs text-muted-foreground">
+                          {' '}
+                          · archived {new Date(d.archivedAt).toLocaleDateString('en-IN')}
+                        </span>
+                      ) : null}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={restore.isPending}
+                      onClick={() => restore.mutate(d.id)}
+                    >
+                      <ArchiveRestore /> Restore
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">No archived departments.</p>
+            )
+          ) : null}
+        </section>
+      ) : null}
     </div>
   );
 }

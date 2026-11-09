@@ -56,6 +56,10 @@ export const createDepartment = (input: DepartmentInput) =>
 export const updateDepartment = (id: string, input: Partial<DepartmentInput>) =>
   apiPatch<DepartmentDto>(`/departments/${id}`, input);
 export const archiveDepartment = (id: string) => apiDelete(`/departments/${id}`);
+export const fetchArchivedDepartments = () =>
+  apiGet<DepartmentDto[]>('/departments', { params: { archived: 'true' } });
+export const restoreDepartment = (id: string) =>
+  apiPost<DepartmentDto>(`/departments/${id}/restore`, {});
 
 /* ---------- Roles ---------- */
 

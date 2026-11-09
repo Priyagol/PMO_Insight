@@ -3,6 +3,7 @@ import { CalendarClock, Plus, Send, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import {
+  REPORT_KIND_LABELS,
   describeReportSchedule,
   type ReportFormat,
   type ReportFrequency,
@@ -79,11 +80,12 @@ function ScheduleDialog({ onClose }: { onClose: () => void }) {
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
-  const formats: ReportFormat[] = report === 'filter' ? ['xlsx', 'csv'] : ['pdf', 'xlsx'];
+  const formats: ReportFormat[] =
+    report === 'filter' ? ['xlsx', 'csv'] : report === 'snapshot' ? ['pdf', 'xlsx'] : ['csv'];
   const valid =
     name.trim() &&
     recipients.length &&
-    (report === 'snapshot' || filterId) &&
+    (report !== 'filter' || filterId) &&
     formats.includes(format);
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -104,7 +106,7 @@ function ScheduleDialog({ onClose }: { onClose: () => void }) {
               value={report}
               onValueChange={(v) => {
                 setReport(v as ReportKind);
-                setFormat(v === 'filter' ? 'xlsx' : 'pdf');
+                setFormat(v === 'filter' ? 'xlsx' : v === 'snapshot' ? 'pdf' : 'csv');
               }}
             >
               <SelectTrigger aria-label="Report">
@@ -112,7 +114,15 @@ function ScheduleDialog({ onClose }: { onClose: () => void }) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="filter">Saved filter results</SelectItem>
-                {canSnapshot ? <SelectItem value="snapshot">Management snapshot</SelectItem> : null}
+                {canSnapshot ? (
+                  <>
+                    <SelectItem value="snapshot">Management snapshot</SelectItem>
+                    <SelectItem value="work_summary">{REPORT_KIND_LABELS.work_summary}</SelectItem>
+                    <SelectItem value="project_status">
+                      {REPORT_KIND_LABELS.project_status}
+                    </SelectItem>
+                  </>
+                ) : null}
               </SelectContent>
             </Select>
             <Select value={format} onValueChange={(v) => setFormat(v as ReportFormat)}>
@@ -151,6 +161,7 @@ function ScheduleDialog({ onClose }: { onClose: () => void }) {
                 <SelectItem value="daily">Daily</SelectItem>
                 <SelectItem value="weekly">Weekly</SelectItem>
                 <SelectItem value="monthly">Monthly</SelectItem>
+                <SelectItem value="quarterly">Quarterly</SelectItem>
               </SelectContent>
             </Select>
             {frequency === 'weekly' ? (
@@ -166,7 +177,7 @@ function ScheduleDialog({ onClose }: { onClose: () => void }) {
                   ))}
                 </SelectContent>
               </Select>
-            ) : frequency === 'monthly' ? (
+            ) : frequency === 'monthly' || frequency === 'quarterly' ? (
               <Select value={dayOfMonth} onValueChange={setDayOfMonth}>
                 <SelectTrigger aria-label="Day of month">
                   <SelectValue />
@@ -294,7 +305,7 @@ export function ReportSchedules() {
                 <p className="text-xs text-muted-foreground">
                   {s.report === 'filter'
                     ? `Filter “${s.filter?.name ?? 'deleted'}”`
-                    : 'Management snapshot'}{' '}
+                    : REPORT_KIND_LABELS[s.report]}{' '}
                   · {s.format.toUpperCase()} · {describeReportSchedule(s)} · to{' '}
                   {s.recipients.map((r) => r.name).join(', ')}
                 </p>

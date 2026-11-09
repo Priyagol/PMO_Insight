@@ -490,6 +490,12 @@ export async function updateProject(
   const end = (next.endDate ?? before.endDate) as string | null;
   if (start && end && start > end)
     throw new UnprocessableError('End date must be on or after the start date');
+  // A later end date is a slip: the reason is kept in the project's history (delay analysis).
+  const slipped = Boolean(
+    next.endDate && before.endDate && (next.endDate as string) > before.endDate,
+  );
+  if (slipped && !input.dateChangeReason)
+    throw new UnprocessableError('Give a reason for moving the end date later');
 
   const changes = diffFields(
     before as unknown as Record<string, unknown>,
@@ -512,6 +518,7 @@ export async function updateProject(
     version: updated.version,
     changes,
     changedBy: auth.userObjectId,
+    reason: slipped ? input.dateChangeReason : null,
   });
   await recordActivity(rc, {
     projectId: before._id,
@@ -519,7 +526,9 @@ export async function updateProject(
     entityId: before._id,
     entityLabel: `${before.key} ${updated.name}`,
     verb: 'updated',
-    summary: `updated ${changes.map((c) => c.field).join(', ')}`,
+    summary: slipped
+      ? `moved the end date from ${before.endDate} to ${updated.endDate}: ${input.dateChangeReason}`
+      : `updated ${changes.map((c) => c.field).join(', ')}`,
     changes,
   });
   if (changes.some((c) => c.field === 'status')) {
@@ -778,6 +787,7 @@ export async function listVersions(rc: RequestContext, id: string): Promise<Proj
     changedBy: v.changedBy ? (users.get(v.changedBy.toString()) ?? null) : null,
     changedAt: v.createdAt.toISOString(),
     changes: v.changes,
+    reason: v.reason ?? undefined,
   }));
 }
 

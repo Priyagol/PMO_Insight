@@ -9,7 +9,11 @@ import type {
   JournalInput,
   PageMeta,
   StartTimerInput,
+  PerformancePeriod,
   SuggestionDto,
+  TeamDto,
+  TeamInput,
+  TeamPerformanceDto,
   TimerDto,
   TimesheetDto,
   UpdateWorklogInput,
@@ -86,6 +90,15 @@ export const cancelAvailability = (id: string) =>
 
 export const fetchTeamWorkload = (departmentId?: string) =>
   apiGet<WorkloadRowDto[]>('/teams/workload', { params: toParams({ departmentId }) });
+export const fetchTeamPerformance = (
+  period: PerformancePeriod,
+  filter: { departmentId?: string; teamId?: string } = {},
+) => apiGet<TeamPerformanceDto>('/teams/performance', { params: toParams({ period, ...filter }) });
+export const fetchTeams = () => apiGet<TeamDto[]>('/teams');
+export const createTeam = (input: TeamInput) => apiPost<TeamDto>('/teams', input);
+export const updateTeam = (id: string, input: Partial<TeamInput>) =>
+  apiPatch<TeamDto>(`/teams/${id}`, input);
+export const archiveTeam = (id: string) => apiDelete(`/teams/${id}`);
 export const fetchPassport = (userId: string) =>
   apiGet<WorkPassportDto>(`/users/${userId}/passport`);
 

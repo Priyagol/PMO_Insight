@@ -32,6 +32,7 @@ function toDto(d: PopulatedDepartment, memberCount: number): DepartmentDto {
       ? { id: d.parentId._id.toString(), name: d.parentId.name, code: d.parentId.code }
       : null,
     memberCount,
+    archivedAt: d.archived && d.archivedAt ? d.archivedAt.toISOString() : undefined,
     createdAt: d.createdAt.toISOString(),
     updatedAt: d.updatedAt.toISOString(),
   };
@@ -51,11 +52,11 @@ async function memberCounts(ids: Types.ObjectId[]): Promise<Map<string, number>>
 }
 
 /** Department names are not sensitive; every signed-in user can list them for filters and forms. */
-export async function listDepartments(q?: string): Promise<DepartmentDto[]> {
-  const filter: Record<string, unknown> = { archived: false };
+export async function listDepartments(q?: string, archived = false): Promise<DepartmentDto[]> {
+  const filter: Record<string, unknown> = { archived };
   if (q) filter.name = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
   const docs = await Department.find(filter)
-    .sort({ name: 1 })
+    .sort(archived ? { archivedAt: -1 } : { name: 1 })
     .populate(POPULATE)
     .lean<PopulatedDepartment[]>();
   const counts = await memberCounts(docs.map((d) => d._id));
@@ -179,4 +180,39 @@ export async function archiveDepartment(rc: RequestContext, id: string): Promise
     summary: `Archived department ${dept.name} (${dept.code})`,
     before: dept,
   });
+}
+
+/**
+ * Brings an archived department back. Its code must still be free (another department may have
+ * taken it meanwhile); an archived parent is dropped so the department sits at the top level.
+ */
+export async function restoreDepartment(rc: RequestContext, id: string): Promise<DepartmentDto> {
+  if (!Types.ObjectId.isValid(id)) throw new NotFoundError('Department');
+  const dept = await Department.findOne({ _id: oid(id), archived: true }).lean();
+  if (!dept) throw new NotFoundError('Department');
+  const taken = await Department.findOne({ code: dept.code, archived: false })
+    .select('name')
+    .lean();
+  if (taken)
+    throw new ConflictError(
+      `Code ${dept.code} is now used by ${taken.name}. Change that department's code first.`,
+    );
+  const parentArchived = dept.parentId
+    ? !(await Department.exists({ _id: dept.parentId, archived: false }))
+    : false;
+  await Department.updateOne(
+    { _id: dept._id },
+    {
+      $set: { archived: false, archivedAt: null, ...(parentArchived ? { parentId: null } : {}) },
+    },
+  );
+  const after = await getDepartment(id);
+  await recordAudit(rc, {
+    action: 'department.restored',
+    entityType: 'department',
+    entityId: id,
+    summary: `Restored department ${after.name} (${after.code})${parentArchived ? '; its parent is archived, so it is now a top-level department' : ''}`,
+    after,
+  });
+  return after;
 }

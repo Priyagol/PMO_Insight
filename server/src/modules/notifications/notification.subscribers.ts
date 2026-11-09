@@ -1,6 +1,7 @@
 import { STATUS_LABELS, type TaskStatus } from '@arihant/shared';
 import { eventBus, type DomainEvent } from '../../core/events';
 import { addDaysIso, orgToday } from '../../core/time';
+import { Department } from '../departments/department.model';
 import { Project } from '../projects/project.model';
 import { Risk } from '../risks/risk.model';
 import { Role } from '../roles/role.model';
@@ -234,6 +235,7 @@ export async function sendDueReminders(today = orgToday()): Promise<number> {
       body: t.title,
       link: taskLink(t._id.toString()),
     });
+  sent += await escalateOverdue(today);
   // Automations listen for "task.overdue" (every open task that passed its due date yesterday).
   const newlyOverdue = await Task.find({
     dueDate: addDaysIso(today, -1),
@@ -247,5 +249,76 @@ export async function sendDueReminders(today = orgToday()): Promise<number> {
       taskId: t._id.toString(),
       projectId: t.projectId.toString(),
     });
+  return sent;
+}
+
+/** Days past the due date when an open task is escalated, and to whom. */
+export const OVERDUE_ESCALATION = { managers: 3, departmentHead: 7 } as const;
+
+/**
+ * Overdue escalation (runs with the daily reminders). After 3 days the assignee's manager and
+ * the project manager are told; after 7 days the department head too. Each step matches one
+ * due date, so it fires once per task.
+ */
+export async function escalateOverdue(today = orgToday()): Promise<number> {
+  const open = { $nin: ['done', 'cancelled'] as TaskStatus[] };
+  let sent = 0;
+  for (const [level, days] of [
+    ['managers', OVERDUE_ESCALATION.managers],
+    ['departmentHead', OVERDUE_ESCALATION.departmentHead],
+  ] as const) {
+    const tasks = await Task.find({
+      dueDate: addDaysIso(today, -days),
+      status: open,
+      deletedAt: null,
+      assigneeId: { $ne: null },
+    })
+      .select('key title assigneeId projectId')
+      .lean();
+    if (!tasks.length) continue;
+    const [people, projects] = await Promise.all([
+      User.find({ _id: { $in: tasks.map((t) => t.assigneeId) } })
+        .select('name managerId departmentId')
+        .lean(),
+      Project.find({ _id: { $in: tasks.map((t) => t.projectId) } })
+        .select('managerId departmentId')
+        .lean(),
+    ]);
+    const person = new Map(people.map((p) => [p._id.toString(), p]));
+    const project = new Map(projects.map((p) => [p._id.toString(), p]));
+    const heads =
+      level === 'departmentHead'
+        ? new Map(
+            (
+              await Department.find({
+                _id: {
+                  $in: [
+                    ...projects.map((p) => p.departmentId),
+                    ...people.map((p) => p.departmentId),
+                  ].filter(Boolean),
+                },
+              })
+                .select('headId')
+                .lean()
+            ).map((d) => [d._id.toString(), d.headId]),
+          )
+        : null;
+    for (const t of tasks) {
+      const who = person.get(t.assigneeId!.toString());
+      const proj = project.get(t.projectId.toString());
+      const recipients = heads
+        ? [heads.get(String(proj?.departmentId ?? who?.departmentId ?? '')) ?? null]
+        : [who?.managerId, proj?.managerId];
+      sent += await notify(
+        recipients.filter((r) => r && String(r) !== t.assigneeId!.toString()),
+        {
+          type: 'task_escalated',
+          title: `${t.key} is ${days} days overdue`,
+          body: `${t.title} — assigned to ${who?.name ?? 'someone'}`,
+          link: taskLink(t._id.toString()),
+        },
+      );
+    }
+  }
   return sent;
 }

@@ -146,6 +146,10 @@ export type CreateProjectInput = z.input<typeof createProjectSchema>;
 export const updateProjectSchema = z
   .strictObject(withoutDefaults(projectBase.shape))
   .omit({ key: true, memberIds: true, templateId: true })
+  .extend({
+    /** Required when the end date moves later: why the project slipped (kept in its history). */
+    dateChangeReason: z.string().trim().min(3, 'Give a short reason').max(500),
+  })
   .partial()
   .refine(datesInOrder, {
     message: 'End date must be on or after the start date',
@@ -433,6 +437,8 @@ export interface ProjectVersionDto {
   changedBy: UserRef | null;
   changedAt: string;
   changes: { field: string; from: unknown; to: unknown }[];
+  /** Why the end date moved later. */
+  reason?: string;
 }
 
 export interface TaskRef {

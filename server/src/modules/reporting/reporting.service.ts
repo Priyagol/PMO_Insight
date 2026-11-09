@@ -2,6 +2,7 @@ import mongoose, { Schema, Types } from 'mongoose';
 import {
   REPORT_FORMATS,
   REPORT_FREQUENCIES,
+  SUMMARY_REPORTS,
   REPORT_KINDS,
   createdResolvedQuerySchema,
   describeReportSchedule,
@@ -26,12 +27,15 @@ import {
   ORG_TZ,
   addDaysIso,
   dayOfWeekIso,
+  fiscalPeriodStart,
   orgDateTime,
   orgToday,
   weekStartIso,
 } from '../../core/time';
 import { readableProjectIds } from '../../core/rbac/work-access';
 import { recordAudit } from '../audit/audit.service';
+import { getOrgSettings } from '../settings/settings.service';
+import { projectStatus, workSummary } from '../insights/digest.service';
 import { buildSnapshot, renderSnapshotPdf, renderSnapshotXlsx } from '../insights/report.service';
 import { aqlTaskFilter, exportSearch } from '../search/search.service';
 import { SavedFilter } from '../search/search.models';
@@ -140,6 +144,7 @@ const MAX_PER_OWNER = 20;
 export function nextRun(
   s: Pick<IReportSubscription, 'frequency' | 'dayOfWeek' | 'dayOfMonth' | 'hour'>,
   now = new Date(),
+  fiscalYearStartMonth = 4,
 ): Date {
   const time = `${String(s.hour).padStart(2, '0')}:00`;
   let day = orgToday(0, now);
@@ -148,7 +153,10 @@ export function nextRun(
     const ok =
       s.frequency === 'daily' ||
       (s.frequency === 'weekly' && iso === s.dayOfWeek) ||
-      (s.frequency === 'monthly' && Number(day.slice(8, 10)) === s.dayOfMonth);
+      (s.frequency === 'monthly' && Number(day.slice(8, 10)) === s.dayOfMonth) ||
+      (s.frequency === 'quarterly' &&
+        Number(day.slice(8, 10)) === s.dayOfMonth &&
+        fiscalPeriodStart(day, 'quarter', fiscalYearStartMonth).slice(0, 7) === day.slice(0, 7));
     const at = orgDateTime(day, time);
     if (ok && at > now) return at;
   }
@@ -241,7 +249,7 @@ export async function createSubscription(
     hour: input.hour,
     recipientIds,
     active: input.active,
-    nextRunAt: input.active ? nextRun(input) : null,
+    nextRunAt: input.active ? nextRun(input, new Date(), await fiscalStart()) : null,
   });
   await recordAudit(rc, {
     action: 'report.subscription_created',
@@ -283,7 +291,7 @@ export async function updateSubscription(
         hour: input.hour,
         recipientIds,
         active: input.active,
-        nextRunAt: input.active ? nextRun(input) : null,
+        nextRunAt: input.active ? nextRun(input, new Date(), await fiscalStart()) : null,
       },
     },
     { returnDocument: 'after' },
@@ -297,12 +305,120 @@ export async function deleteSubscription(rc: RequestContext, id: string): Promis
   await ReportSubscription.deleteOne({ _id: s._id });
 }
 
-/** Period the report covers: yesterday (daily), last week (weekly) or last month (monthly). */
-function periodFor(frequency: ReportFrequency, now: Date): { from: string; to: string } {
+const fiscalStart = async () => (await getOrgSettings()).fiscalYearStartMonth;
+
+/**
+ * Period the report covers: yesterday (daily), last week (weekly), the last 30 days (monthly)
+ * or the previous financial quarter (quarterly).
+ */
+function periodFor(
+  frequency: ReportFrequency,
+  now: Date,
+  fiscalYearStartMonth = 4,
+): { from: string; to: string } {
   const today = orgToday(0, now);
+  if (frequency === 'quarterly') {
+    const thisQuarter = fiscalPeriodStart(today, 'quarter', fiscalYearStartMonth);
+    const lastDay = addDaysIso(thisQuarter, -1);
+    return { from: fiscalPeriodStart(lastDay, 'quarter', fiscalYearStartMonth), to: lastDay };
+  }
   if (frequency === 'daily') return { from: addDaysIso(today, -1), to: addDaysIso(today, -1) };
   if (frequency === 'weekly') return { from: addDaysIso(today, -7), to: addDaysIso(today, -1) };
   return { from: addDaysIso(today, -30), to: addDaysIso(today, -1) };
+}
+
+const csvCell = (v: unknown) => {
+  const t = String(v ?? '');
+  // A leading = + - @ would be read as a formula by spreadsheet programs.
+  const safe = /^[=+\-@]/.test(t) ? `'${t}` : t;
+  return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+};
+const toCsv = (rows: unknown[][]) => rows.map((r) => r.map(csvCell).join(',')).join('\r\n');
+
+/** Work summary or project status: the highlights go in the e-mail, the detail as CSV. */
+async function summaryReport(
+  rc: RequestContext,
+  kind: 'work_summary' | 'project_status',
+  period: { from: string; to: string },
+) {
+  if (kind === 'work_summary') {
+    const d = await workSummary(rc, period);
+    const rows = [
+      [
+        'Person',
+        'Hours logged',
+        'Tasks finished',
+        'Handed over',
+        'Started',
+        'Overdue now',
+        'Blockers',
+      ],
+      ...d.people.map((p) => [
+        p.user.name,
+        p.loggedHours,
+        p.completed.map((t) => t.key).join(' '),
+        p.handedOver,
+        p.started,
+        p.overdue,
+        p.blockers.join(' | '),
+      ]),
+    ];
+    return {
+      text: [
+        `Work summary for ${d.period.from} to ${d.period.to}:`,
+        ...d.highlights.map((h) => `- ${h}`),
+      ].join('\n'),
+      file: {
+        body: toCsv(rows),
+        contentType: 'text/csv; charset=utf-8',
+        fileName: `work-summary_${d.period.from}_${d.period.to}.csv`,
+      },
+    };
+  }
+  const d = await projectStatus(rc, period);
+  const rows = [
+    [
+      'Project',
+      'Name',
+      'Status',
+      'Health',
+      'Progress %',
+      'Finished in period',
+      'Overdue',
+      'Blocked',
+      'Critical risks',
+      'Forecast finish',
+      'Notes',
+    ],
+    ...d.projects.map((p) => [
+      p.project.key,
+      p.project.name,
+      p.rag.toUpperCase(),
+      p.healthScore,
+      p.progress,
+      p.completedInPeriod,
+      p.overdue,
+      p.blocked,
+      p.openCriticalRisks,
+      p.forecastDate ?? '',
+      p.notes.join(' '),
+    ]),
+  ];
+  return {
+    text: [
+      `Project status for ${d.period.from} to ${d.period.to}:`,
+      ...d.highlights.map((h) => `- ${h}`),
+      ...d.projects
+        .filter((p) => p.rag === 'red')
+        .slice(0, 10)
+        .map((p) => `- RED ${p.project.key}: ${p.notes.join(' ')}`),
+    ].join('\n'),
+    file: {
+      body: toCsv(rows),
+      contentType: 'text/csv; charset=utf-8',
+      fileName: `project-status_${d.period.from}_${d.period.to}.csv`,
+    },
+  };
 }
 
 /** Builds and e-mails one report to each recipient, with the recipient's own access. */
@@ -335,12 +451,24 @@ async function send(s: IReportSubscription, now: Date): Promise<string> {
         const out = await exportSearch(rc, { aql: filter!.aql, format: s.format });
         file = out;
         summary = `${out.count} task(s) match “${filter!.name}”.`;
+      } else if (s.report === 'work_summary' || s.report === 'project_status') {
+        if (!can(auth, 'analytics:view')) {
+          skipped.push(r.name);
+          continue;
+        }
+        const out = await summaryReport(
+          rc,
+          s.report,
+          periodFor(s.frequency, now, await fiscalStart()),
+        );
+        file = out.file;
+        summary = out.text;
       } else {
         if (!can(auth, 'analytics:view')) {
           skipped.push(r.name);
           continue;
         }
-        const snap = await buildSnapshot(rc, periodFor(s.frequency, now));
+        const snap = await buildSnapshot(rc, periodFor(s.frequency, now, await fiscalStart()));
         const body =
           s.format === 'pdf' ? await renderSnapshotPdf(snap) : await renderSnapshotXlsx(snap);
         file = {
@@ -360,7 +488,9 @@ async function send(s: IReportSubscription, now: Date): Promise<string> {
           `Hello ${r.name},`,
           '',
           summary,
-          'The report is attached. It contains only work you are allowed to see.',
+          SUMMARY_REPORTS.includes(s.report)
+            ? 'The detail is attached as CSV. It contains only work you are allowed to see.'
+            : 'The report is attached. It contains only work you are allowed to see.',
           '',
           `Schedule: ${describeReportSchedule(s)}. To stop it, ask the person who set it up.`,
         ].join('\n'),
@@ -389,11 +519,12 @@ export async function runDueSubscriptions(now = new Date()): Promise<number> {
   const due = await ReportSubscription.find({ active: true, nextRunAt: { $ne: null, $lte: now } })
     .limit(100)
     .lean();
+  const fy = await fiscalStart();
   for (const s of due) {
     // Claim it first so two workers cannot send the same report twice.
     const claimed = await ReportSubscription.updateOne(
       { _id: s._id, nextRunAt: s.nextRunAt },
-      { $set: { nextRunAt: nextRun(s, now) } },
+      { $set: { nextRunAt: nextRun(s, now, fy) } },
     );
     if (!claimed.modifiedCount) continue;
     const result = await send(s, now);

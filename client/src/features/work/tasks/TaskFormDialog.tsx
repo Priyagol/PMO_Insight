@@ -421,7 +421,7 @@ export function TaskFormDialog({
               />
             </FormField>
           ) : null}
-          {type === 'story' || type === 'epic' ? (
+          {type === 'story' || type === 'enhancement' || type === 'epic' ? (
             <FormField label="Acceptance criteria">
               <Textarea rows={2} value={criteria} onChange={(e) => setCriteria(e.target.value)} />
             </FormField>

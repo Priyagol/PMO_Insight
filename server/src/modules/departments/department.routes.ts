@@ -13,13 +13,25 @@ import { validate } from '../../middleware/validate';
 import * as departments from './department.service';
 
 const idParams = z.object({ id: objectIdSchema });
-const listQuery = z.strictObject({ q: z.string().trim().max(80).optional() });
+const listQuery = z.strictObject({
+  q: z.string().trim().max(80).optional(),
+  archived: z.enum(['true', 'false']).optional(),
+});
 const id = (req: Request) => (req.valid!.params as { id: string }).id;
 
 /* Controllers (thin: parse → service → respond). */
 const list = async (req: Request, res: Response) => {
-  sendOk(res, await departments.listDepartments((req.valid!.query as { q?: string }).q));
+  const q = req.valid!.query as { q?: string; archived?: 'true' | 'false' };
+  sendOk(res, await departments.listDepartments(q.q, q.archived === 'true'));
 };
+const restore = async (req: Request, res: Response) => {
+  sendOk(res, await departments.restoreDepartment(requestContext(req), id(req)));
+};
+/** Archived departments are listed only for people who manage departments. */
+const archivedOnlyForManagers = (req: Request, res: Response, next: () => void) =>
+  (req.query as { archived?: string }).archived === 'true'
+    ? authorize('department:manage', 'org')(req, res, next)
+    : next();
 const get = async (req: Request, res: Response) => {
   sendOk(res, await departments.getDepartment(id(req)));
 };
@@ -46,7 +58,7 @@ const archive = async (req: Request, res: Response) => {
 
 export const departmentRoutes = Router();
 departmentRoutes.use(authenticate);
-departmentRoutes.get('/', validate({ query: listQuery }), list);
+departmentRoutes.get('/', archivedOnlyForManagers, validate({ query: listQuery }), list);
 departmentRoutes.get('/:id', validate({ params: idParams }), get);
 departmentRoutes.post(
   '/',
@@ -65,4 +77,10 @@ departmentRoutes.delete(
   authorize('department:manage', 'org'),
   validate({ params: idParams }),
   archive,
+);
+departmentRoutes.post(
+  '/:id/restore',
+  authorize('department:manage', 'org'),
+  validate({ params: idParams }),
+  restore,
 );

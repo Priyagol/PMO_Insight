@@ -28,6 +28,13 @@ export const useSkills = (q: string) =>
 export const useDepartments = () =>
   useQuery({ queryKey: queryKeys.departments, queryFn: org.fetchDepartments, staleTime: 60_000 });
 
+export const useArchivedDepartments = (enabled: boolean) =>
+  useQuery({
+    queryKey: [...queryKeys.departments, 'archived'],
+    queryFn: org.fetchArchivedDepartments,
+    enabled,
+  });
+
 export const useRoles = (enabled = true) =>
   useQuery({ queryKey: queryKeys.roles, queryFn: org.fetchRoles, staleTime: 60_000, enabled });
 

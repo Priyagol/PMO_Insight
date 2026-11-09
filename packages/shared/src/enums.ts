@@ -43,6 +43,8 @@ export type EmploymentStatus = (typeof EMPLOYMENT_STATUSES)[number];
 
 export const SYSTEM_ROLES = [
   'super_admin',
+  'managing_director',
+  'cto',
   'director',
   'department_head',
   'project_manager',
@@ -56,6 +58,8 @@ export type SystemRole = (typeof SYSTEM_ROLES)[number];
 
 export const ROLE_LABELS: Record<SystemRole, string> = {
   super_admin: 'Super Admin',
+  managing_director: 'MD / Chairman',
+  cto: 'CTO / CIO',
   director: 'Director / Management',
   department_head: 'Department Head',
   project_manager: 'Project Manager',

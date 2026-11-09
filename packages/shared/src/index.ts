@@ -20,3 +20,5 @@ export * from './security';
 export * from './outbound';
 export * from './reporting';
 export * from './servicedesk';
+export * from './delay';
+export * from './digest';

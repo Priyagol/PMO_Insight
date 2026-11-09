@@ -9,6 +9,7 @@ import {
   type AiProvider,
   type AiRequest,
 } from '../src/modules/ai/ai.provider';
+import { AiUsage, RULES_MODEL } from '../src/modules/ai/ai.service';
 import { AuditLog } from '../src/modules/audit/audit-log.model';
 import { evaluate, handleEvent } from '../src/modules/automations/automation.engine';
 import { AutomationRun } from '../src/modules/automations/automation.model';
@@ -339,13 +340,26 @@ async function enableAi(limit = 50) {
 }
 
 describe('AI assistant', () => {
-  it('is off by default, admin-controlled, and needs a configured provider', async () => {
+  it('is off by default, admin-controlled, and needs a configured provider (except the rule-based summary)', async () => {
     const { pm, project } = await setup();
     const status = await api().get('/api/v1/ai/status').set(pm.auth);
     expect(status.body.data).toMatchObject({ enabled: false, usedToday: 0 });
+    // Without AI the project summary is built from the data by fixed rules.
+    const rules = await api()
+      .post('/api/v1/ai/project-summary')
+      .set(pm.auth)
+      .send({ projectId: project.id });
+    expect(rules.status).toBe(200);
+    expect(rules.body.data.model).toBe(RULES_MODEL);
+    expect(rules.body.data.proposal.summary).toContain(project.key);
+    expect(await AiUsage.countDocuments()).toBe(0);
     expect(
-      (await api().post('/api/v1/ai/project-summary').set(pm.auth).send({ projectId: project.id }))
-        .status,
+      (
+        await api()
+          .post('/api/v1/ai/requirements-to-tasks')
+          .set(pm.auth)
+          .send({ projectId: project.id, text: 'Users can reset their password by e-mail.' })
+      ).status,
     ).toBe(503);
     expect(
       (
@@ -358,9 +372,9 @@ describe('AI assistant', () => {
     await enableAi();
     // Real provider without an API key in the test environment.
     const off = await api()
-      .post('/api/v1/ai/project-summary')
+      .post('/api/v1/ai/requirements-to-tasks')
       .set(pm.auth)
-      .send({ projectId: project.id });
+      .send({ projectId: project.id, text: 'Users can reset their password by e-mail.' });
     expect(off.status).toBe(503);
     expect(off.body.error.message).toMatch(/not configured/);
     expect(await AuditLog.countDocuments({ action: 'settings.ai_updated' })).toBe(1);

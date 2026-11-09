@@ -20,7 +20,7 @@ export function renderRoutes(
     store ??
     (permissions
       ? authenticatedStore(permissions)
-      : makeStore({ session: { status: 'anonymous', user: null, permissions: {} } }));
+      : makeStore({ session: { status: 'anonymous', user: null, permissions: {}, signedOut: false } }));
   const router = createMemoryRouter(routes, { initialEntries: [path] });
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },

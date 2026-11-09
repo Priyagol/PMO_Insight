@@ -186,7 +186,13 @@ export function AcceptanceCriteria({
   save: Save;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
-  if (!(task.type === 'story' || task.type === 'epic' || task.acceptanceCriteria)) return null;
+  if (!(
+    task.type === 'story' ||
+    task.type === 'enhancement' ||
+    task.type === 'epic' ||
+    task.acceptanceCriteria
+  ))
+    return null;
   return (
     <section className="space-y-2">
       <div className="flex items-center justify-between">

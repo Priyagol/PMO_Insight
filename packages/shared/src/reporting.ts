@@ -23,9 +23,17 @@ export interface CreatedResolvedDto {
 
 /* ============================ Scheduled report e-mails ============================ */
 
-export const REPORT_KINDS = ['filter', 'snapshot'] as const;
+export const REPORT_KINDS = ['filter', 'snapshot', 'work_summary', 'project_status'] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
-export const REPORT_FREQUENCIES = ['daily', 'weekly', 'monthly'] as const;
+/** The summaries arrive in the e-mail body, with the detail attached as CSV. */
+export const SUMMARY_REPORTS: readonly ReportKind[] = ['work_summary', 'project_status'];
+export const REPORT_KIND_LABELS: Record<ReportKind, string> = {
+  filter: 'Saved filter results',
+  snapshot: 'Management snapshot',
+  work_summary: 'Work summary (who did what)',
+  project_status: 'Project status (red / amber / green)',
+};
+export const REPORT_FREQUENCIES = ['daily', 'weekly', 'monthly', 'quarterly'] as const;
 export type ReportFrequency = (typeof REPORT_FREQUENCIES)[number];
 export const REPORT_FORMATS = ['csv', 'xlsx', 'pdf'] as const;
 export type ReportFormat = (typeof REPORT_FORMATS)[number];
@@ -40,7 +48,7 @@ export const reportSubscriptionSchema = z
     frequency: z.enum(REPORT_FREQUENCIES),
     /** 1 = Monday … 7 = Sunday (weekly). */
     dayOfWeek: z.number().int().min(1).max(7).default(1),
-    /** 1–28 (monthly). */
+    /** 1–28 (monthly; quarterly runs on this day of each quarter's first month). */
     dayOfMonth: z.number().int().min(1).max(28).default(1),
     /** Hour of the day in the organisation's time zone. */
     hour: z.number().int().min(0).max(23).default(9),
@@ -52,10 +60,19 @@ export const reportSubscriptionSchema = z
     message: 'Choose the saved filter to send',
     path: ['filterId'],
   })
-  .refine((v) => (v.report === 'filter' ? v.format !== 'pdf' : v.format !== 'csv'), {
-    message: 'Filters are sent as CSV or Excel; the snapshot as PDF or Excel',
-    path: ['format'],
-  });
+  .refine(
+    (v) =>
+      v.report === 'filter'
+        ? v.format !== 'pdf'
+        : v.report === 'snapshot'
+          ? v.format !== 'csv'
+          : v.format === 'csv',
+    {
+      message:
+        'Filters are sent as CSV or Excel, the snapshot as PDF or Excel, and summaries as CSV',
+      path: ['format'],
+    },
+  );
 export type ReportSubscriptionInput = z.input<typeof reportSubscriptionSchema>;
 
 export interface ReportSubscriptionDto {
@@ -87,5 +104,24 @@ export function describeReportSchedule(s: {
   const days = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   if (s.frequency === 'daily') return `Every day at ${at}`;
   if (s.frequency === 'weekly') return `Every ${days[s.dayOfWeek]} at ${at}`;
+  if (s.frequency === 'quarterly')
+    return `Quarterly on day ${s.dayOfMonth} of the new quarter at ${at}`;
   return `Monthly on day ${s.dayOfMonth} at ${at}`;
+}
+
+/**
+ * First day of the financial quarter or year containing `date`. The financial year starts on
+ * the 1st of `fiscalYearStartMonth` (April in India); quarters are three-month blocks from it.
+ */
+export function fiscalPeriodStart(
+  date: string,
+  period: 'quarter' | 'year',
+  fiscalYearStartMonth = 4,
+): string {
+  const [y, m] = date.split('-').map(Number) as [number, number];
+  const sinceYearStart = (m - fiscalYearStartMonth + 12) % 12;
+  const back = period === 'year' ? sinceYearStart : sinceYearStart % 3;
+  const startMonth = ((m - 1 - back + 12) % 12) + 1;
+  const startYear = startMonth > m ? y - 1 : y;
+  return `${startYear}-${String(startMonth).padStart(2, '0')}-01`;
 }

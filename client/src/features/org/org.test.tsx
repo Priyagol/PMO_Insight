@@ -24,6 +24,8 @@ vi.mock('@/services/api/org', () => ({
   createDepartment: vi.fn(),
   updateDepartment: vi.fn(),
   archiveDepartment: vi.fn(),
+  fetchArchivedDepartments: vi.fn(),
+  restoreDepartment: vi.fn(),
   createRole: vi.fn(),
   updateRole: vi.fn(),
   deleteRole: vi.fn(),
@@ -114,6 +116,36 @@ describe('EmployeesPage', () => {
       weeklyCapacityHours: 40,
       skills: [],
     });
+  });
+});
+
+describe('DepartmentsPage', () => {
+  it('lists archived departments for administrators and restores one', async () => {
+    const dept = {
+      id: 'd1',
+      name: 'Old Ops',
+      code: 'OPS',
+      head: null,
+      parent: null,
+      memberCount: 0,
+      archivedAt: '2026-10-01T00:00:00.000Z',
+      createdAt: '',
+      updatedAt: '',
+    };
+    vi.mocked(org.fetchArchivedDepartments).mockResolvedValue([dept]);
+    vi.mocked(org.restoreDepartment).mockResolvedValue({ ...dept, archivedAt: undefined });
+    const user = userEvent.setup();
+    renderRoutes(routes, {
+      path: '/admin/departments',
+      permissions: { 'department:manage': 'org', 'user:read': 'org' },
+    });
+    await user.click(
+      await screen.findByRole('button', { name: /Show archived departments/ }, { timeout: 15_000 }),
+    );
+    const section = screen.getByRole('region', { name: 'Archived departments' });
+    expect(await within(section).findByText('Old Ops')).toBeInTheDocument();
+    await user.click(within(section).getByRole('button', { name: /Restore/ }));
+    await waitFor(() => expect(org.restoreDepartment).toHaveBeenCalledWith('d1'));
   });
 });
 

@@ -178,6 +178,8 @@ export interface IProjectVersion {
   version: number;
   changes: { field: string; from: unknown; to: unknown }[];
   changedBy: Types.ObjectId | null;
+  /** Why the end date moved later (asked for when it does). */
+  reason?: string | null;
   createdAt: Date;
 }
 
@@ -190,6 +192,7 @@ const projectVersionSchema = new Schema<IProjectVersion>(
       default: [],
     },
     changedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    reason: { type: String, default: null, maxlength: 500 },
   },
   { timestamps: { createdAt: true, updatedAt: false }, collection: 'projectVersions' },
 );

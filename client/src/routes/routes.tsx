@@ -44,6 +44,10 @@ const IMPLEMENTED: Record<string, ReactNode> = {
     () => import('@/features/insights/ProjectHealthPage'),
     'ProjectHealthPage',
   ),
+  'project-timeline': page(
+    () => import('@/features/insights/ProjectTimelinePage'),
+    'ProjectTimelinePage',
+  ),
   risks: page(() => import('@/features/insights/RisksPage'), 'RisksPage'),
   approvals: page(() => import('@/features/collaboration/ApprovalsPage'), 'ApprovalsPage'),
   documents: page(() => import('@/features/delivery/DocumentsPage'), 'DocumentsPage'),

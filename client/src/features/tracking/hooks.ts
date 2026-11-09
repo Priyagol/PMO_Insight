@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import type { WorklogQuery } from '@arihant/shared';
+import type { PerformancePeriod, WorklogQuery } from '@arihant/shared';
 import { errorMessage } from '@/lib/errors';
 import * as t from '@/services/api/tracking';
 
@@ -14,6 +14,9 @@ export const trackKeys = {
   journals: (q: object) => ['tracking', 'journals', q] as const,
   availability: (q: object) => ['tracking', 'availability', q] as const,
   workload: (dept?: string) => ['tracking', 'workload', dept ?? 'all'] as const,
+  performance: (period: string, filter: object) =>
+    ['tracking', 'performance', period, filter] as const,
+  teams: ['tracking', 'teams'] as const,
   passport: (id: string) => ['tracking', 'passport', id] as const,
   assignment: ['assignment'] as const,
   config: ['assignment', 'config'] as const,
@@ -51,6 +54,16 @@ export const useTeamWorkload = (departmentId?: string) =>
     queryKey: trackKeys.workload(departmentId),
     queryFn: () => t.fetchTeamWorkload(departmentId),
   });
+export const useTeamPerformance = (
+  period: PerformancePeriod,
+  filter: { departmentId?: string; teamId?: string },
+) =>
+  useQuery({
+    queryKey: trackKeys.performance(period, filter),
+    queryFn: () => t.fetchTeamPerformance(period, filter),
+    placeholderData: keepPreviousData,
+  });
+export const useTeams = () => useQuery({ queryKey: trackKeys.teams, queryFn: t.fetchTeams });
 export const usePassport = (userId: string | null, enabled = true) =>
   useQuery({
     queryKey: trackKeys.passport(userId ?? ''),
