@@ -182,7 +182,11 @@ export function CapacityPanel() {
               <thead className="bg-muted/40 text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2 text-left font-medium">
-                    {GROUPS.find((g) => g.value === groupBy)!.label.replace('By ', '')}
+                    {
+                      { person: 'Person', team: 'Team', department: 'Department', skill: 'Skill' }[
+                        groupBy
+                      ]
+                    }
                   </th>
                   {d.weeks.map((w, i) => (
                     <th key={w} className="px-2 py-2 text-right font-medium whitespace-nowrap">
