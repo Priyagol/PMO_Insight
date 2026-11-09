@@ -31,8 +31,14 @@ export const useWorklogs = (q: Partial<WorklogQuery>) =>
     queryFn: () => t.fetchWorklogs(q),
     placeholderData: keepPreviousData,
   });
-export const useTimer = () =>
-  useQuery({ queryKey: trackKeys.timer, queryFn: t.fetchTimer, refetchInterval: 60_000 });
+/** The running timer; pass false for people who cannot log work, so nothing is requested. */
+export const useTimer = (enabled = true) =>
+  useQuery({
+    queryKey: trackKeys.timer,
+    queryFn: t.fetchTimer,
+    refetchInterval: 60_000,
+    enabled,
+  });
 export const useTimesheetWeek = (weekStart: string, userId?: string) =>
   useQuery({
     queryKey: trackKeys.week(weekStart, userId),

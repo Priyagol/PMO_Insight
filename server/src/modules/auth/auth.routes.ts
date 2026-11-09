@@ -16,13 +16,24 @@ import {
   resetPasswordSchema,
 } from '@arihant/shared';
 import { authenticate } from '../../middleware/auth';
-import { authLimiter } from '../../middleware/rate-limit';
+import {
+  authLimiter,
+  loginLimiter,
+  loginNetworkLimiter,
+  refreshLimiter,
+} from '../../middleware/rate-limit';
 import { validate } from '../../middleware/validate';
 import * as c from './auth.controller';
 
 export const authRoutes = Router();
 
-authRoutes.post('/login', authLimiter, validate({ body: loginSchema }), c.loginHandler);
+authRoutes.post(
+  '/login',
+  loginNetworkLimiter,
+  loginLimiter,
+  validate({ body: loginSchema }),
+  c.loginHandler,
+);
 authRoutes.post('/login/mfa', authLimiter, validate({ body: mfaLoginSchema }), c.mfaLoginHandler);
 authRoutes.get('/config', c.authConfigHandler);
 
@@ -104,7 +115,7 @@ authRoutes.post(
     );
   },
 );
-authRoutes.post('/refresh', authLimiter, c.refreshHandler);
+authRoutes.post('/refresh', refreshLimiter, c.refreshHandler);
 authRoutes.post('/logout', c.logoutHandler);
 authRoutes.post('/logout-all', authenticate, c.logoutAllHandler);
 authRoutes.get('/me', authenticate, c.meHandler);

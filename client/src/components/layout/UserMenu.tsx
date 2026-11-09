@@ -8,7 +8,8 @@ import {
   ShieldCheck,
   Sun,
 } from 'lucide-react';
-import { lazy, Suspense, useState } from 'react';
+import { Suspense, useState } from 'react';
+import { lazyFresh } from '@/lib/lazy-fresh';
 import { UserAvatar } from '@/components/common/UserAvatar';
 import {
   DropdownMenu,
@@ -25,12 +26,12 @@ import { useAuthActions } from '@/features/auth/use-auth-actions';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { setCommandPaletteOpen, setTheme, type ThemePreference } from '@/store/ui-slice';
 
-const AccountSecurityDialog = lazy(() =>
+const AccountSecurityDialog = lazyFresh(() =>
   import('@/features/security/AccountSecurityDialog').then((m) => ({
     default: m.AccountSecurityDialog,
   })),
 );
-const ChangePasswordDialog = lazy(() =>
+const ChangePasswordDialog = lazyFresh(() =>
   import('@/features/auth/ChangePasswordDialog').then((m) => ({ default: m.ChangePasswordDialog })),
 );
 

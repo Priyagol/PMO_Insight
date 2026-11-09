@@ -74,7 +74,8 @@ export const NAV_SECTIONS: NavSection[] = [
         label: 'My Workspace',
         path: '/my-workspace',
         icon: UserRound,
-        permission: 'task:read',
+        // Personal time, journal and leave page: only for people who log their own work.
+        permission: 'worklog:write',
         phase: 4,
         description: 'Your tasks, timer, journal and deadlines',
       },

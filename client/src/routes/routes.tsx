@@ -1,4 +1,5 @@
-import { lazy, Suspense, type ComponentType, type ReactNode } from 'react';
+import { Suspense, type ComponentType, type ReactNode } from 'react';
+import { lazyFresh } from '@/lib/lazy-fresh';
 import type { RouteObject } from 'react-router';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AppShell } from '@/layouts/AppShell';
@@ -13,7 +14,7 @@ function page<M extends Record<string, unknown>>(
   loader: () => Promise<M>,
   name: keyof M,
 ): ReactNode {
-  const Component = lazy(() => loader().then((m) => ({ default: m[name] as ComponentType })));
+  const Component = lazyFresh(() => loader().then((m) => ({ default: m[name] as ComponentType })));
   return (
     <Suspense fallback={<Skeleton className="h-96 w-full" />}>
       <Component />

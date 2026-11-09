@@ -12,7 +12,8 @@ import {
   Save,
   Timer,
 } from 'lucide-react';
-import { lazy, Suspense, useState } from 'react';
+import { Suspense, useState } from 'react';
+import { lazyFresh } from '@/lib/lazy-fresh';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   PROJECT_MEMBER_ROLES,
@@ -83,13 +84,13 @@ import { ProgressBar } from './ProgressBar';
 
 // Charts (Recharts) load only when the Analytics tab is opened.
 // Charts (Recharts) load only when a report tab is opened.
-const AgileReportsPanel = lazy(() =>
+const AgileReportsPanel = lazyFresh(() =>
   import('@/features/agile/AgileReportsPanel').then((m) => ({ default: m.AgileReportsPanel })),
 );
-const DelayAnalysis = lazy(() =>
+const DelayAnalysis = lazyFresh(() =>
   import('@/features/insights/DelayAnalysis').then((m) => ({ default: m.DelayAnalysis })),
 );
-const ProjectAnalyticsTab = lazy(() =>
+const ProjectAnalyticsTab = lazyFresh(() =>
   import('@/features/insights/ProjectAnalyticsTab').then((m) => ({
     default: m.ProjectAnalyticsTab,
   })),

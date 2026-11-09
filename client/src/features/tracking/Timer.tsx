@@ -216,7 +216,7 @@ export function TimerControls({ timer, compact }: { timer: TimerDto; compact?: b
 /** Top-bar chip: shows the running timer anywhere in the app. */
 export function TimerChip() {
   const canLog = useCan('worklog:write');
-  const timer = useTimer();
+  const timer = useTimer(canLog);
   const elapsed = useElapsed(timer.data);
   const [starting, setStarting] = useState(false);
   if (!canLog) return null;

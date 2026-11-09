@@ -1,4 +1,5 @@
-import { lazy, Suspense, useCallback, useMemo, useState } from 'react';
+import { Suspense, useCallback, useMemo, useState } from 'react';
+import { lazyFresh } from '@/lib/lazy-fresh';
 import { Outlet } from 'react-router';
 import { BrandMark, Sidebar, SidebarNav } from '@/components/layout/Sidebar';
 import { CommandPalette } from '@/components/layout/CommandPalette';
@@ -11,7 +12,7 @@ import { filterNav, NAV_SECTIONS } from '@/routes/nav-config';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { setCommandPaletteOpen, setMobileNavOpen, toggleSidebar } from '@/store/ui-slice';
 
-const TaskDrawerHost = lazy(() =>
+const TaskDrawerHost = lazyFresh(() =>
   import('@/features/work/tasks/TaskDrawer').then((m) => ({ default: m.TaskDrawerHost })),
 );
 

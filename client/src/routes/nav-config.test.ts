@@ -16,6 +16,14 @@ describe('filterNav', () => {
     ]);
   });
 
+  it('hides My Workspace from people who do not log their own work (e.g. MD / Chairman)', () => {
+    const ids = filterNav(NAV_SECTIONS, { 'task:read': 'org', 'dashboard:view': 'org' }).flatMap(
+      (s) => s.items.map((i) => i.id),
+    );
+    expect(ids).toContain('my-tasks');
+    expect(ids).not.toContain('my-workspace');
+  });
+
   it('shows nothing without permissions', () => {
     expect(filterNav(NAV_SECTIONS, {})).toEqual([]);
   });

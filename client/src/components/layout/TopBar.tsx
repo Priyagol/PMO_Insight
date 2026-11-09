@@ -1,5 +1,6 @@
 import { Bell, Menu, Moon, Search, Sun } from 'lucide-react';
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
+import { lazyFresh } from '@/lib/lazy-fresh';
 import { Button } from '@/components/ui/button';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { setCommandPaletteOpen, setMobileNavOpen, setTheme } from '@/store/ui-slice';
@@ -7,11 +8,11 @@ import { Breadcrumbs } from './Breadcrumbs';
 import { UserMenu } from './UserMenu';
 
 // The timer (with its log-work form) loads in its own chunk, after the shell renders.
-const TimerChip = lazy(() =>
+const TimerChip = lazyFresh(() =>
   import('@/features/tracking/Timer').then((m) => ({ default: m.TimerChip })),
 );
 // The notification panel (list, settings, date formatting) loads in its own chunk.
-const NotificationCenter = lazy(() =>
+const NotificationCenter = lazyFresh(() =>
   import('./NotificationCenter').then((m) => ({ default: m.NotificationCenter })),
 );
 
