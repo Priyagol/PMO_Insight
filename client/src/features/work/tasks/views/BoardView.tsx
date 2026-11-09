@@ -21,7 +21,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState, type PointerEvent } from 'react';
 import { toast } from 'sonner';
 import {
   STATUS_LABELS,
@@ -52,16 +52,40 @@ function Card({ task, onOpen }: { task: TaskDto; onOpen: (id: string) => void })
     id: task.id,
     disabled: !task.can.update,
   });
+  // A card the user may not change cannot be dragged: say why instead of doing nothing.
+  const press = useRef<{ x: number; y: number; told: boolean } | null>(null);
+  const readOnly = task.can.update
+    ? {}
+    : {
+        title: `${task.key} is view-only for you. You can move tasks assigned to you.`,
+        onPointerDown: (e: PointerEvent<HTMLDivElement>) => {
+          press.current = { x: e.clientX, y: e.clientY, told: false };
+        },
+        onPointerMove: (e: PointerEvent<HTMLDivElement>) => {
+          const p = press.current;
+          if (!p || p.told || Math.hypot(e.clientX - p.x, e.clientY - p.y) < 12) return;
+          p.told = true;
+          toast.info(
+            `You can't move ${task.key}: it isn't assigned to you. Ask the assignee or the project lead.`,
+            { id: 'board-view-only' },
+          );
+        },
+      };
   return (
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       {...attributes}
       {...listeners}
+      {...readOnly}
       role="button"
       tabIndex={0}
       aria-label={`${task.key} ${task.title}`}
-      onClick={() => onOpen(task.id)}
+      onClick={() => {
+        // A drag attempt on a view-only card is not a click.
+        if (press.current?.told) return void (press.current = null);
+        onOpen(task.id);
+      }}
       onKeyDown={(e) => {
         if (e.key === 'Enter') onOpen(task.id);
       }}
@@ -98,7 +122,10 @@ function Column({
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   return (
-    <section aria-label={label} className="flex w-72 shrink-0 flex-col rounded-xl bg-muted/50">
+    <section
+      aria-label={label}
+      className="flex max-h-full min-h-0 w-72 shrink-0 flex-col rounded-xl bg-muted/50"
+    >
       <header className="flex items-center justify-between px-3 py-2.5">
         <h3 className="text-xs font-semibold tracking-wide uppercase">
           {label}{' '}
@@ -132,7 +159,7 @@ function Column({
         <div
           ref={setNodeRef}
           className={cn(
-            'flex min-h-24 flex-1 flex-col gap-2 px-2 pb-2',
+            'flex min-h-24 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2',
             isOver && 'rounded-lg bg-primary/5',
           )}
         >
@@ -287,7 +314,8 @@ export function BoardView({
         setDragCols(null);
       }}
     >
-      <div className="flex gap-3 overflow-x-auto pb-3">
+      {/* Fits the window: columns scroll on their own, so the sideways scrollbar stays in view. */}
+      <div className="flex h-[calc(100dvh-18.5rem)] min-h-[22rem] items-start gap-3 overflow-x-auto pb-3">
         {board.data.map((c) => (
           <Column
             key={c.status}

@@ -64,7 +64,14 @@ import { ActivityList } from '../collab/ActivityList';
 import { AttachmentsPanel } from '../collab/AttachmentsPanel';
 import { CommentsPanel } from '../collab/CommentsPanel';
 import { relativeDue } from '../format';
-import { useProject, useTask, useTaskActivity, useTasks, useWorkMutation } from '../hooks';
+import {
+  useProject,
+  useTask,
+  useTaskActivity,
+  useTasks,
+  useTaskUpdate,
+  useWorkMutation,
+} from '../hooks';
 import { TaskFormDialog } from './TaskFormDialog';
 import { AssigneeSelect, PrioritySelect } from './task-ui';
 import { useTaskDrawer } from './use-task-drawer';
@@ -167,7 +174,7 @@ function TaskDetail({ task }: { task: TaskDto }) {
   const editable = task.can.update;
   const watching = task.watcherIds.includes(meId);
 
-  const update = useWorkMutation((input: UpdateTaskInput) => work.updateTask(task.id, input));
+  const update = useTaskUpdate(task.id);
   const save = (input: UpdateTaskInput) => update.mutate(input);
   const watch = useWorkMutation(() => work.watchTask(task.id, !watching), {
     success: watching ? 'Stopped watching' : 'Watching this task',
